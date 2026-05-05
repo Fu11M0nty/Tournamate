@@ -227,13 +227,7 @@ export default function QRScannerModal({ onClose }: Props) {
         </header>
 
         <div className="space-y-4 p-4">
-          {phase === 'init' && (
-            <div className="flex h-36 items-center justify-center text-sm text-zinc-400">
-              Starting camera…
-            </div>
-          )}
-
-          {phase === 'scanning' && (
+          {(phase === 'init' || phase === 'scanning') && (
             <div className="relative aspect-[4/3] overflow-hidden rounded-lg bg-black">
               <video
                 ref={videoRef}
@@ -241,12 +235,21 @@ export default function QRScannerModal({ onClose }: Props) {
                 muted
                 playsInline
               />
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <div className="h-44 w-44 rounded-lg border-2 border-white/80 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]" />
-              </div>
-              <p className="absolute bottom-2 left-0 right-0 text-center text-xs text-white/80">
-                Hold QR code steady inside the frame
-              </p>
+              {phase === 'init' && (
+                <div className="absolute inset-0 flex items-center justify-center bg-white text-sm text-zinc-400 dark:bg-zinc-950">
+                  Starting camera…
+                </div>
+              )}
+              {phase === 'scanning' && (
+                <>
+                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                    <div className="h-44 w-44 rounded-lg border-2 border-white/80 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]" />
+                  </div>
+                  <p className="absolute bottom-2 left-0 right-0 text-center text-xs text-white/80">
+                    Hold QR code steady inside the frame
+                  </p>
+                </>
+              )}
             </div>
           )}
 

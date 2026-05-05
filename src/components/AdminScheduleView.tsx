@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   DndContext,
   DragEndEvent,
@@ -28,6 +28,7 @@ import {
   type AutoPlanMatch,
 } from '@/lib/autoPlan'
 import type { AgeGroup, Court, Day, Match, Team, Tournament } from '@/lib/types'
+import type { ScheduleImportRow } from '@/lib/scheduleExcel'
 
 const DEFAULT_DAY_START_MIN = 8 * 60 // 08:00
 const DEFAULT_DAY_END_MIN = 17 * 60 // 17:00
@@ -264,6 +265,9 @@ export default function AdminScheduleView({
   const [regeneratingGroupId, setRegeneratingGroupId] = useState<string | null>(null)
   const [isRegenerating, setIsRegenerating] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
+  const [parsedImport, setParsedImport] = useState<ScheduleImportRow[] | null>(null)
+  const [importing, setImporting] = useState(false)
+  const importFileRef = useRef<HTMLInputElement>(null)
 
   const isPreviewMode = previewPlacements.size > 0
 
@@ -843,6 +847,66 @@ export default function AdminScheduleView({
     onTournamentChanged()
   }
 
+  async function handleExport() {
+    try {
+      const { exportSchedule } = await import('@/lib/scheduleExcel')
+      await exportSchedule(tournament, ageGroups, matches, teams)
+      toast.success('Schedule exported to Excel')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Export failed')
+    }
+  }
+
+  async function handleImportFile(file: File) {
+    try {
+      const { parseScheduleImport } = await import('@/lib/scheduleExcel')
+      const updates = await parseScheduleImport(file, matches, tournament, ageGroups)
+      if (updates.length === 0) {
+        toast.error('No valid matches found in the file')
+        return
+      }
+      setParsedImport(updates)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to read Excel file')
+    }
+  }
+
+  async function handleImportConfirm() {
+    if (!parsedImport) return
+    setImporting(true)
+    try {
+      const results = await Promise.all(
+        parsedImport.map((u) =>
+          supabase
+            .from('matches')
+            .update({
+              court: u.court,
+              kickoff_time: u.kickoff_time,
+              duration_minutes: u.duration_minutes,
+              status: u.status,
+              is_planned: u.is_planned,
+            })
+            .eq('id', u.id)
+            .select('id'),
+        ),
+      )
+      const failed = results.filter((r) => r.error)
+      if (failed.length > 0) {
+        toast.error(`${failed.length} of ${parsedImport.length} updates failed`)
+      } else {
+        toast.success(
+          `${parsedImport.length} match${parsedImport.length === 1 ? '' : 'es'} updated from Excel`,
+        )
+      }
+      setParsedImport(null)
+      await load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Import failed')
+    } finally {
+      setImporting(false)
+    }
+  }
+
   function clearPreview() {
     setPreviewPlacements(new Map())
     setPreviewStats(null)
@@ -1109,6 +1173,36 @@ export default function AdminScheduleView({
           >
             {tournament.schedule_locked ? '🔒 Locked' : '🔓 Unlocked'}
           </button>
+          {!tournament.schedule_locked && (
+            <>
+              <button
+                type="button"
+                onClick={handleExport}
+                disabled={matches.length === 0}
+                title="Download schedule as Excel spreadsheet"
+                className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800 shadow-sm hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-200 dark:hover:bg-emerald-900"
+              >
+                Export Excel
+              </button>
+              <label
+                title="Upload an edited schedule Excel file"
+                className="cursor-pointer rounded-md border border-sky-300 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-800 shadow-sm hover:bg-sky-100 dark:border-sky-700 dark:bg-sky-950 dark:text-sky-200 dark:hover:bg-sky-900"
+              >
+                Import Excel
+                <input
+                  ref={importFileRef}
+                  type="file"
+                  accept=".xlsx,.xls"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0]
+                    if (file) await handleImportFile(file)
+                    e.target.value = ''
+                  }}
+                />
+              </label>
+            </>
+          )}
           {tournament.schedule_locked && (
             <a
               href={`/admin/scorecards/${day}?t=${tournament.id}`}
@@ -1325,6 +1419,15 @@ export default function AdminScheduleView({
             const ok = await runUnplan(unplanGroupIds)
             if (ok) setShowUnplanDialog(false)
           }}
+        />
+      )}
+
+      {parsedImport && (
+        <ImportConfirmDialog
+          updates={parsedImport}
+          importing={importing}
+          onCancel={() => setParsedImport(null)}
+          onConfirm={handleImportConfirm}
         />
       )}
 
@@ -1667,6 +1770,84 @@ function UnplanDialog({
             className="rounded-md bg-mk-red px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-mk-red/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {unplanning ? 'Unplanning…' : 'Unplan'}
+          </button>
+        </footer>
+      </div>
+    </div>
+  )
+}
+
+function ImportConfirmDialog({
+  updates,
+  importing,
+  onCancel,
+  onConfirm,
+}: {
+  updates: ScheduleImportRow[]
+  importing: boolean
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  const planned = updates.filter((u) => u.is_planned).length
+  const unplanned = updates.filter((u) => !u.is_planned).length
+  const completed = updates.filter((u) => u.status === 'completed').length
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget && !importing) onCancel()
+      }}
+    >
+      <div className="w-full max-w-sm rounded-lg border border-zinc-200 bg-white shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
+        <header className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+          <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-50">
+            Apply Excel import?
+          </h3>
+          <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+            This will overwrite the schedule data for the matches listed below.
+          </p>
+        </header>
+        <div className="space-y-3 px-4 py-4">
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-md border border-zinc-200 bg-zinc-50 py-2 dark:border-zinc-700 dark:bg-zinc-900">
+              <p className="text-xl font-bold text-zinc-900 dark:text-zinc-50">{updates.length}</p>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">matches</p>
+            </div>
+            <div className="rounded-md border border-emerald-200 bg-emerald-50 py-2 dark:border-emerald-800 dark:bg-emerald-950/50">
+              <p className="text-xl font-bold text-emerald-700 dark:text-emerald-400">{planned}</p>
+              <p className="text-xs text-emerald-600 dark:text-emerald-500">scheduled</p>
+            </div>
+            <div className="rounded-md border border-zinc-200 bg-zinc-50 py-2 dark:border-zinc-700 dark:bg-zinc-900">
+              <p className="text-xl font-bold text-zinc-400 dark:text-zinc-500">{unplanned}</p>
+              <p className="text-xs text-zinc-400 dark:text-zinc-500">unplanned</p>
+            </div>
+          </div>
+          {completed > 0 && (
+            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800/50 dark:bg-amber-950/50 dark:text-amber-300">
+              {completed} match{completed === 1 ? '' : 'es'} marked as completed — existing scores will not be changed.
+            </p>
+          )}
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            Matches not in the file will not be affected.
+          </p>
+        </div>
+        <footer className="flex justify-end gap-2 border-t border-zinc-200 px-4 py-3 dark:border-zinc-800">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={importing}
+            className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={importing}
+            className="rounded-md bg-mk-red px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-mk-red/90 disabled:opacity-50"
+          >
+            {importing ? 'Importing…' : `Apply ${updates.length} update${updates.length === 1 ? '' : 's'}`}
           </button>
         </footer>
       </div>
