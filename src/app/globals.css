@@ -36,12 +36,21 @@ body {
 
 @media print {
   /* Print-friendly: white background, no shadows, keep cards intact */
+  @page {
+    size: A4 portrait;
+    margin: 8mm;
+  }
   body {
     background: #ffffff !important;
     color: #000000 !important;
   }
-  [data-print-hide] {
+  [data-print-hide],
+  .print\:hidden {
     display: none !important;
+    visibility: hidden !important;
+    position: static !important;
+    height: 0 !important;
+    overflow: hidden !important;
   }
   /* Avoid splitting result/fixture cards across pages */
   article,
@@ -61,4 +70,58 @@ body {
   table {
     font-size: 10pt;
   }
+
+  /* ── Scorecard print layout ─────────────────────────────── */
+  .scorecard-screen-bg {
+    background: transparent !important;
+    padding: 0 !important;
+    margin-top: 0 !important;
+    overflow: visible !important;
+  }
+  .scorecard-a4-page {
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    break-after: page;
+    page-break-after: always;
+    overflow: visible !important;
+  }
+  .scorecard-page {
+    /* Fill the printable area: A4 height minus @page margins (8mm × 2) */
+    height: calc(297mm - 16mm) !important;
+    gap: 4mm !important;
+  }
+}
+
+/* ── Scorecard screen preview (grey paper background) ────── */
+.scorecard-screen-bg {
+  background: #4b5563;
+  padding: 20px 16px;
+  overflow-x: auto;
+  min-height: 100vh;
+}
+
+/* Each A4 page — appears as a white paper sheet on screen */
+.scorecard-a4-page {
+  width: 210mm;
+  height: 297mm;
+  background: white;
+  margin: 0 auto 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
+  padding: 8mm;
+  box-sizing: border-box;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Scorecard grid — 2 columns × 2 rows, fills A4 content area */
+.scorecard-page {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: repeat(2, 1fr);
+  gap: 4mm;
+  height: 100%; /* fill the a4-page content area (297mm - 16mm padding) */
 }

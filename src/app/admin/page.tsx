@@ -10,6 +10,7 @@ import AdminTournamentList from '@/components/AdminTournamentList'
 import AdminImport from '@/components/AdminImport'
 import AdminScheduleView from '@/components/AdminScheduleView'
 import AdminAgeGroupList from '@/components/AdminAgeGroupList'
+import QRScannerModal from '@/components/QRScannerModal'
 import { createClient } from '@/lib/supabase'
 import type { AgeGroup, Day, Match, Team, Tournament } from '@/lib/types'
 
@@ -45,6 +46,7 @@ export default function AdminPage() {
   const [showImport, setShowImport] = useState(false)
   const [showSchedule, setShowSchedule] = useState(false)
   const [showAgeGroups, setShowAgeGroups] = useState(false)
+  const [showQRScanner, setShowQRScanner] = useState(false)
 
   const loadTournaments = useCallback(async () => {
     setLoadingTournaments(true)
@@ -326,6 +328,13 @@ export default function AdminPage() {
           </button>
           <button
             type="button"
+            onClick={() => setShowQRScanner(true)}
+            className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-800 shadow-sm transition-colors hover:bg-emerald-100 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-200 dark:hover:bg-emerald-900"
+          >
+            Scan QR
+          </button>
+          <button
+            type="button"
             onClick={handleBackup}
             disabled={backingUp}
             title="Take a one-click snapshot of all matches into matches_backup"
@@ -535,6 +544,9 @@ export default function AdminPage() {
         )}
       </section>
       </>
+      )}
+      {showQRScanner && (
+        <QRScannerModal onClose={() => setShowQRScanner(false)} />
       )}
     </main>
   )

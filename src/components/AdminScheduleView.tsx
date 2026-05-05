@@ -1109,6 +1109,16 @@ export default function AdminScheduleView({
           >
             {tournament.schedule_locked ? '🔒 Locked' : '🔓 Unlocked'}
           </button>
+          {tournament.schedule_locked && (
+            <a
+              href={`/admin/scorecards/${day}?t=${tournament.id}`}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-md border border-violet-300 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-800 shadow-sm hover:bg-violet-100 dark:border-violet-700 dark:bg-violet-950 dark:text-violet-200 dark:hover:bg-violet-900"
+            >
+              🖨️ Print scorecards
+            </a>
+          )}
           <button
             type="button"
             onClick={onClose}
