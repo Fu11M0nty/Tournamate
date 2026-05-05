@@ -225,7 +225,7 @@ export default function ScorecardCard({
             flexShrink: 0,
           }}
         >
-          <QRCodeSVG value={captureUrl} size={72} level="M" />
+          <QRCodeSVG value={shortId} size={72} level="M" />
           <span
             style={{ fontFamily: 'monospace', fontSize: '7pt', color: '#555' }}
           >

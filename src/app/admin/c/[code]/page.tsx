@@ -10,14 +10,36 @@ export default async function CaptureByCodePage({ params }: Props) {
   const { code } = await params
   const supabase = await createServerSupabaseClient()
 
-  // Look up match by UUID prefix (first 8 hex chars of UUID without hyphens)
-  const { data: match } = await supabase
-    .from('matches')
-    .select('*')
-    .ilike('id', `${code.toLowerCase()}%`)
-    .is('deleted_at', null)
-    .limit(1)
-    .single()
+  let match = null
+
+  const isFullUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(code)
+
+  if (isFullUuid) {
+    const { data } = await supabase
+      .from('matches')
+      .select('*')
+      .eq('id', code)
+      .is('deleted_at', null)
+      .single()
+    match = data
+  } else {
+    // Short code search for manual entry
+    const cleanCode = code.toLowerCase().replace(/[^a-z0-9]/g, '')
+    const { data: allMatches } = await supabase
+      .from('matches')
+      .select('id')
+      .is('deleted_at', null)
+
+    const found = allMatches?.find((m) => m.id.replace(/-/g, '').startsWith(cleanCode))
+    if (found) {
+      const { data } = await supabase
+        .from('matches')
+        .select('*')
+        .eq('id', found.id)
+        .single()
+      match = data
+    }
+  }
 
   if (!match) {
     return (

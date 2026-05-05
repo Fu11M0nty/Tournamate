@@ -76,9 +76,18 @@ export default function QRScannerModal({ onClose }: Props) {
     const result = jsQR(img.data, img.width, img.height, {
       inversionAttempts: 'dontInvert',
     })
-    if (result && result.data.includes('/admin/c/')) {
-      navigate(result.data)
-      return
+    if (result) {
+      const text = result.data.trim()
+      const isFullUrl = text.includes('/admin/c/')
+      const isCode = /^[A-Za-z0-9]{8}$/.test(text) || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text)
+
+      if (isFullUrl) {
+        navigate(text)
+        return
+      } else if (isCode) {
+        navigate(`/admin/c/${text}`)
+        return
+      }
     }
     rafRef.current = requestAnimationFrame(tick)
   }, [navigate])
@@ -180,15 +189,21 @@ export default function QRScannerModal({ onClose }: Props) {
         inversionAttempts: 'attemptBoth',
       })
 
-      if (result && result.data.includes('/admin/c/')) {
-        navigate(result.data)
+      if (result) {
+        const text = result.data.trim()
+        const isFullUrl = text.includes('/admin/c/')
+        const isCode = /^[A-Za-z0-9]{8}$/.test(text) || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text)
+
+        if (isFullUrl) {
+          navigate(text)
+        } else if (isCode) {
+          navigate(`/admin/c/${text}`)
+        } else {
+          setFileError(`QR found but not a scorecard code: ${result.data}`)
+          if (fileInputRef.current) fileInputRef.current.value = ''
+        }
       } else {
-        setFileError(
-          result
-            ? `QR found but not a scorecard code: ${result.data}`
-            : 'No QR code detected in that image. Try again with better lighting.',
-        )
-        // Reset file input so the same file can be re-selected
+        setFileError('No QR code detected in that image. Try again with better lighting.')
         if (fileInputRef.current) fileInputRef.current.value = ''
       }
     } catch (err) {
