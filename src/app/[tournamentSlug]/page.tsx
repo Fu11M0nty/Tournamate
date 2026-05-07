@@ -1,4 +1,4 @@
-import { createServerSupabaseClient } from '@/lib/supabase'
+import { createPublicSupabaseClient } from '@/lib/supabase'
 import { calculateStandings } from '@/lib/standings'
 import MiniStandings from '@/components/MiniStandings'
 import NotFoundMessage from '@/components/NotFoundMessage'
@@ -43,7 +43,7 @@ function dayBannerLabel(
 
 export default async function TournamentLandingPage({ params }: Props) {
   const { tournamentSlug } = await params
-  const supabase = await createServerSupabaseClient()
+  const supabase = await createPublicSupabaseClient()
 
   const { data: tournamentData } = await supabase
     .from('tournaments')
@@ -105,18 +105,18 @@ export default async function TournamentLandingPage({ params }: Props) {
 
   return (
     <main className="mx-auto w-full max-w-6xl pb-16">
-      <section className="relative overflow-hidden bg-gradient-to-br from-mk-ink via-mk-ink-soft to-mk-ink text-white">
+      <section className="relative overflow-hidden bg-gradient-to-br from-tm-navy via-tm-navy-soft to-tm-navy text-white">
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-mk-red/30 blur-3xl"
+          className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-tm-orange/20 blur-3xl"
         />
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute -left-20 bottom-[-80px] h-64 w-64 rounded-full bg-mk-gold/20 blur-3xl"
+          className="pointer-events-none absolute -left-20 bottom-[-80px] h-64 w-64 rounded-full bg-tm-sky/15 blur-3xl"
         />
         <div className="relative px-4 pt-8 pb-10 sm:px-8 sm:pt-12 sm:pb-14">
-          <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-mk-gold ring-1 ring-mk-gold/40 backdrop-blur">
-            <span className="h-1.5 w-1.5 rounded-full bg-mk-gold" />
+          <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-tm-orange ring-1 ring-tm-orange/40 backdrop-blur">
+            <span className="h-1.5 w-1.5 rounded-full bg-tm-orange" />
             {tournament.status === 'live'
               ? 'Live tournament'
               : tournament.status === 'upcoming'
@@ -135,13 +135,13 @@ export default async function TournamentLandingPage({ params }: Props) {
           </p>
           <div className="mt-5 flex flex-wrap gap-2 text-xs font-semibold">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-white/90 ring-1 ring-white/15">
-              <span className="text-mk-gold">{totalGroups}</span> groups
+              <span className="text-tm-orange">{totalGroups}</span> groups
             </span>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-white/90 ring-1 ring-white/15">
-              <span className="text-mk-gold">{totalTeams}</span> teams
+              <span className="text-tm-orange">{totalTeams}</span> teams
             </span>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-white/90 ring-1 ring-white/15">
-              <span className="text-mk-gold">{playedMatches}</span> /{' '}
+              <span className="text-tm-orange">{playedMatches}</span> /{' '}
               {totalMatches} played
             </span>
           </div>
@@ -174,7 +174,7 @@ export default async function TournamentLandingPage({ params }: Props) {
             <header className="mb-4 flex items-center gap-3">
               <h2
                 id={`${d}-heading`}
-                className="text-xs font-extrabold uppercase tracking-[0.25em] text-mk-red"
+                className="text-xs font-extrabold uppercase tracking-[0.25em] text-tm-orange"
               >
                 {dayBannerLabel(
                   d,
@@ -182,7 +182,7 @@ export default async function TournamentLandingPage({ params }: Props) {
                   tournament.end_date
                 )}
               </h2>
-              <span className="h-px flex-1 bg-mk-red/30" />
+              <span className="h-px flex-1 bg-tm-orange/30" />
             </header>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {groupsForDay.map((g) => {

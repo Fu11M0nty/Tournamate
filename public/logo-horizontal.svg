@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 365 68">
+  <title>TournaMate</title>
+  <defs>
+    <filter id="text-shadow" x="-5%" y="-10%" width="120%" height="140%">
+      <feDropShadow dx="0" dy="3" stdDeviation="2.5" flood-color="#000000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  <!-- Mark: same crop as logo-icon.svg -->
+  <svg x="0" y="2" width="74" height="64" viewBox="420 0 560 500" overflow="hidden">
+    <image href="Tournamate-removebg-preview2.svg" x="0" y="0" width="1436" height="696"/>
+  </svg>
+  <!-- 3D extrude layer 2 — furthest back, darkest -->
+  <text transform="translate(1.5,1.5)" y="50" font-family="Nunito, Poppins, 'Arial Rounded MT Bold', system-ui, sans-serif" font-weight="900" font-size="44">
+    <tspan x="82" fill="#1a4a6e">Tourna</tspan><tspan fill="#7a3a08">Mate</tspan>
+  </text>
+  <!-- 3D extrude layer 1 — mid depth -->
+  <text transform="translate(0.75,0.75)" y="50" font-family="Nunito, Poppins, 'Arial Rounded MT Bold', system-ui, sans-serif" font-weight="900" font-size="44">
+    <tspan x="82" fill="#2d6a9e">Tourna</tspan><tspan fill="#b85510">Mate</tspan>
+  </text>
+  <!-- Main text — front face with soft drop shadow -->
+  <text y="50" font-family="Nunito, Poppins, 'Arial Rounded MT Bold', system-ui, sans-serif" font-weight="900" font-size="44" filter="url(#text-shadow)">
+    <tspan x="82" fill="#4a9fd4">Tourna</tspan><tspan fill="#f47c20">Mate</tspan>
+  </text>
+</svg>

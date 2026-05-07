@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { createServerSupabaseClient } from '@/lib/supabase'
+import { createPublicSupabaseClient } from '@/lib/supabase'
 import NotFoundMessage from '@/components/NotFoundMessage'
 
 interface Props {
@@ -13,7 +13,7 @@ export default async function DayPage({ params }: Props) {
     return <NotFoundMessage title="Day not found" />
   }
 
-  const supabase = await createServerSupabaseClient()
+  const supabase = await createPublicSupabaseClient()
   const { data: tournament } = await supabase
     .from('tournaments')
     .select('id')

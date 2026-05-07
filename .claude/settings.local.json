@@ -10,7 +10,18 @@
       "Bash(Select-Object -ExpandProperty FullName)",
       "Bash(Sort-Object)",
       "Bash(mkdir -p \"C:\\\\Users\\\\Bav\\\\ClaudeCode-Tutorial\\\\Test-Netters-Website\\\\src\\\\app\\\\admin\\\\scorecards\\\\[day]\")",
-      "Bash(mkdir -p \"C:\\\\Users\\\\Bav\\\\ClaudeCode-Tutorial\\\\Test-Netters-Website\\\\src\\\\app\\\\admin\\\\capture\\\\[matchId]\")"
+      "Bash(mkdir -p \"C:\\\\Users\\\\Bav\\\\ClaudeCode-Tutorial\\\\Test-Netters-Website\\\\src\\\\app\\\\admin\\\\capture\\\\[matchId]\")",
+      "Bash(Get-ChildItem *)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\Bav\\\\ClaudeCode-Tutorial\\\\Test-Netters-Website\" | Where-Object {$_.Name -match \"^\\(middleware|auth|next\\\\.config\\)\" })",
+      "PowerShell(cd \"C:\\\\Users\\\\Bav\\\\ClaudeCode-Tutorial\\\\Test-Netters-Website\"; npx tsc --noEmit 2>&1 | Where-Object { $_ -notmatch \"\\\\.next\" })",
+      "Bash(dir C:\\\\Users\\\\Bav\\\\ClaudeCode-Tutorial\\\\Test-Netters-Website\\\\src\\\\app *)",
+      "Bash(Select-Object FullName)",
+      "Bash(Get-Content *)",
+      "PowerShell(Get-Content \"C:\\\\Users\\\\Bav\\\\ClaudeCode-Tutorial\\\\Test-Netters-Website\\\\public\\\\Tournamate-removebg-preview2.svg\" -TotalCount 60; Write-Host \"---SIZE---\"; \\(Get-Item \"C:\\\\Users\\\\Bav\\\\ClaudeCode-Tutorial\\\\Test-Netters-Website\\\\public\\\\Tournamate-removebg-preview2.svg\"\\).Length / 1KB)",
+      "Bash(New-Item -Path \"C:\\\\Users\\\\Bav\\\\ClaudeCode-Tutorial\\\\Test-Netters-Website\\\\public\\\\logo-horizontal.svg\" -ItemType File -Force)",
+      "Bash(Out-Null)",
+      "Bash(Write-Host \"ok\")",
+      "PowerShell(New-Item *)"
     ]
   }
 }

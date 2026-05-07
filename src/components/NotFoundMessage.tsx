@@ -12,7 +12,7 @@ export default function NotFoundMessage({
   return (
     <main className="flex min-h-[60vh] flex-col items-center justify-center px-6 text-center">
       <p className="text-sm font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
-        Netball Tournament
+        TournaMate
       </p>
       <h1 className="mt-2 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
         {title}
@@ -23,10 +23,10 @@ export default function NotFoundMessage({
         </p>
       )}
       <Link
-        href="/saturday"
-        className="mt-6 inline-flex items-center rounded-full bg-mk-red px-5 py-2 text-sm font-semibold text-white hover:bg-mk-red-dark"
+        href="/"
+        className="mt-6 inline-flex items-center rounded-full bg-tm-orange px-5 py-2 text-sm font-semibold text-white hover:bg-tm-orange-dark"
       >
-        Back to Saturday
+        Back to home
       </Link>
     </main>
   )

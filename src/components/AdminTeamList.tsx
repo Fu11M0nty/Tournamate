@@ -5,6 +5,7 @@ import toast from 'react-hot-toast'
 import TeamEditForm from './TeamEditForm'
 import TeamLogoDropzone from './TeamLogoDropzone'
 import TeamPlayersDialog from './TeamPlayersDialog'
+import ConfirmDialog from './ConfirmDialog'
 import { createClient } from '@/lib/supabase'
 import { restoreTeam, softDeleteTeam } from '@/lib/matches'
 import type { Team } from '@/lib/types'
@@ -29,6 +30,8 @@ export default function AdminTeamList({
   const [showDeleted, setShowDeleted] = useState(false)
   const [deletedTeams, setDeletedTeams] = useState<Team[]>([])
   const [loadingDeleted, setLoadingDeleted] = useState(false)
+  const [showActionsMenu, setShowActionsMenu] = useState(false)
+  const [pendingDelete, setPendingDelete] = useState<Team | null>(null)
   const supabase = createClient()
 
   const loadDeleted = useCallback(async () => {
@@ -51,14 +54,8 @@ export default function AdminTeamList({
     if (showDeleted) loadDeleted()
   }, [showDeleted, loadDeleted])
 
-  async function handleDelete(team: Team) {
-    if (
-      !window.confirm(
-        `Delete "${team.name}"? Their fixtures will also be marked deleted and hidden from the schedule and standings. (Soft delete — can be restored.)`
-      )
-    ) {
-      return
-    }
+  async function confirmDelete(team: Team) {
+    setPendingDelete(null)
     setBusyId(team.id)
     const r = await softDeleteTeam(supabase, team.id)
     setBusyId(null)
@@ -108,14 +105,16 @@ export default function AdminTeamList({
 
   return (
     <>
-      <div className="mb-3 flex flex-wrap items-center justify-end gap-2">
-        <button
-          type="button"
-          onClick={() => setShowDeleted((s) => !s)}
-          className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-        >
-          {showDeleted ? 'Hide deleted' : 'Show deleted'}
-        </button>
+      <div className="mb-3 flex items-center justify-end gap-2">
+        <div className="hidden sm:block">
+          <button
+            type="button"
+            onClick={() => setShowDeleted((s) => !s)}
+            className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          >
+            {showDeleted ? 'Hide deleted' : 'Show deleted'}
+          </button>
+        </div>
         <button
           type="button"
           onClick={() => setCreating(true)}
@@ -123,6 +122,32 @@ export default function AdminTeamList({
         >
           Add team
         </button>
+        <div className="relative sm:hidden">
+          <button
+            type="button"
+            onClick={() => setShowActionsMenu((s) => !s)}
+            className="flex h-8 w-8 items-center justify-center rounded-md border border-zinc-300 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            aria-label="More actions"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z" />
+            </svg>
+          </button>
+          {showActionsMenu && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setShowActionsMenu(false)} />
+              <div className="absolute right-0 top-full mt-2 w-48 z-50 flex flex-col rounded-md border border-zinc-200 bg-white py-1 shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
+                <button
+                  type="button"
+                  onClick={() => { setShowDeleted((s) => !s); setShowActionsMenu(false); }}
+                  className="px-4 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                >
+                  {showDeleted ? 'Hide deleted' : 'Show deleted'}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
       {sorted.length === 0 ? (
         <p className="rounded-lg border border-dashed border-zinc-300 bg-white p-6 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-400">
@@ -135,52 +160,56 @@ export default function AdminTeamList({
         {sorted.map((team) => (
           <li
             key={team.id}
-            className="flex items-center gap-3 px-4 py-3"
+            className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:gap-4"
           >
-            <TeamLogoDropzone team={team} size="md" onSaved={onSaved} />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                {team.name}
-              </p>
-              <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-                {team.short_name && (
-                  <span className="font-mono uppercase">{team.short_name}</span>
-                )}
-                {team.color && (
-                  <span className="inline-flex items-center gap-1">
-                    <span
-                      aria-hidden="true"
-                      className="inline-block h-2 w-2 rounded-full ring-1 ring-zinc-300 dark:ring-zinc-700"
-                      style={{ backgroundColor: team.color }}
-                    />
-                    <span className="tabular-nums">{team.color}</span>
-                  </span>
-                )}
-                {!team.logo_url && <span>No logo</span>}
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <TeamLogoDropzone team={team} size="md" onSaved={onSaved} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                  {team.name}
+                </p>
+                <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+                  {team.short_name && (
+                    <span className="font-mono uppercase">{team.short_name}</span>
+                  )}
+                  {team.color && (
+                    <span className="inline-flex items-center gap-1">
+                      <span
+                        aria-hidden="true"
+                        className="inline-block h-2 w-2 rounded-full ring-1 ring-zinc-300 dark:ring-zinc-700"
+                        style={{ backgroundColor: team.color }}
+                      />
+                      <span className="tabular-nums">{team.color}</span>
+                    </span>
+                  )}
+                  {!team.logo_url && <span>No logo</span>}
+                </div>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setPlayersTeamId(team.id)}
-              className="rounded-md border border-zinc-300 bg-white px-3 py-1 text-xs font-semibold text-zinc-700 shadow-sm transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-            >
-              Players
-            </button>
-            <button
-              type="button"
-              onClick={() => setEditingId(team.id)}
-              className="rounded-md border border-zinc-300 bg-white px-3 py-1 text-xs font-semibold text-zinc-700 shadow-sm transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-            >
-              Edit
-            </button>
-            <button
-              type="button"
-              onClick={() => handleDelete(team)}
-              disabled={busyId === team.id}
-              className="rounded-md border border-red-300 bg-white px-3 py-1 text-xs font-semibold text-red-700 shadow-sm transition-colors hover:bg-red-50 disabled:opacity-60 dark:border-red-900 dark:bg-zinc-900 dark:text-red-400 dark:hover:bg-red-950"
-            >
-              {busyId === team.id ? '…' : 'Delete'}
-            </button>
+            <div className="mt-1 flex w-full shrink-0 gap-2 sm:mt-0 sm:w-auto">
+              <button
+                type="button"
+                onClick={() => setPlayersTeamId(team.id)}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 sm:flex-none"
+              >
+                👥 <span className="hidden sm:inline">Players</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditingId(team.id)}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 sm:flex-none"
+              >
+                ✏️ <span className="hidden sm:inline">Edit</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPendingDelete(team)}
+                disabled={busyId === team.id}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 shadow-sm transition-colors hover:bg-red-50 disabled:opacity-60 dark:border-red-900 dark:bg-zinc-900 dark:text-red-400 dark:hover:bg-red-950 sm:flex-none"
+              >
+                {busyId === team.id ? '…' : <>🗑️ <span className="hidden sm:inline">Delete</span></>}
+              </button>
+            </div>
           </li>
         ))}
       </ul>
@@ -272,6 +301,15 @@ export default function AdminTeamList({
         <TeamPlayersDialog
           team={playersTeam}
           onClose={() => setPlayersTeamId(null)}
+        />
+      )}
+      {pendingDelete && (
+        <ConfirmDialog
+          title={`Delete "${pendingDelete.name}"?`}
+          message={`Their fixtures will also be hidden from the schedule and standings. This is a soft delete and can be restored later.`}
+          confirmLabel="Delete team"
+          onConfirm={() => confirmDelete(pendingDelete)}
+          onCancel={() => setPendingDelete(null)}
         />
       )}
     </>

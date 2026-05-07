@@ -59,7 +59,7 @@ export default function TournamentEditForm({
       return
     }
 
-    const payload = {
+    const basePayload = {
       name: name.trim(),
       slug: trimmedSlug,
       start_date: startDate || null,
@@ -69,14 +69,26 @@ export default function TournamentEditForm({
     }
 
     setSaving(true)
-    const { data, error } =
-      mode === 'create'
-        ? await supabase.from('tournaments').insert(payload).select()
-        : await supabase
-            .from('tournaments')
-            .update(payload)
-            .eq('id', tournament!.id)
-            .select()
+
+    let data, error
+    if (mode === 'create') {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        toast.error('Not authenticated')
+        setSaving(false)
+        return
+      }
+      ;({ data, error } = await supabase
+        .from('tournaments')
+        .insert({ ...basePayload, created_by: user.id })
+        .select())
+    } else {
+      ;({ data, error } = await supabase
+        .from('tournaments')
+        .update(basePayload)
+        .eq('id', tournament!.id)
+        .select())
+    }
     setSaving(false)
 
     if (error) {

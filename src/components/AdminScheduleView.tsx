@@ -260,6 +260,7 @@ export default function AdminScheduleView({
   const [autoPlanCourtNames, setAutoPlanCourtNames] = useState<Set<string>>(
     () => new Set()
   )
+  const [showActionsMenu, setShowActionsMenu] = useState(false)
   const [showUnplanDialog, setShowUnplanDialog] = useState(false)
   const [unplanGroupIds, setUnplanGroupIds] = useState<Set<string>>(() => new Set())
   const [regeneratingGroupId, setRegeneratingGroupId] = useState<string | null>(null)
@@ -268,6 +269,10 @@ export default function AdminScheduleView({
   const [parsedImport, setParsedImport] = useState<ScheduleImportRow[] | null>(null)
   const [importing, setImporting] = useState(false)
   const importFileRef = useRef<HTMLInputElement>(null)
+  const [mobileTab, setMobileTab] = useState<'unplanned' | 'courts'>('unplanned')
+  const [mobileSelectedCourt, setMobileSelectedCourt] = useState<string>('')
+  const [mobileAssignMatch, setMobileAssignMatch] = useState<MatchWithMeta | null>(null)
+  const [savingAssignment, setSavingAssignment] = useState(false)
 
   const isPreviewMode = previewPlacements.size > 0
 
@@ -426,6 +431,16 @@ export default function AdminScheduleView({
       end_time: '17:00',
     }))
   }, [courts, day, tournament.courts, tournament.id])
+
+  useEffect(() => {
+    if (sortedCourts.length > 0) {
+      if (!mobileSelectedCourt || !sortedCourts.find(c => c.name === mobileSelectedCourt)) {
+        setMobileSelectedCourt(sortedCourts[0].name)
+      }
+    } else {
+      setMobileSelectedCourt('')
+    }
+  }, [sortedCourts, mobileSelectedCourt])
 
   // Dynamic grid bounds — fit the configured courts. Round to 30-min ticks
   // so the time-axis labels line up. A 5-min buffer is added at each end so
@@ -850,7 +865,7 @@ export default function AdminScheduleView({
   async function handleExport() {
     try {
       const { exportSchedule } = await import('@/lib/scheduleExcel')
-      await exportSchedule(tournament, ageGroups, matches, teams)
+      await exportSchedule(tournament, ageGroups, matches, teams, courts)
       toast.success('Schedule exported to Excel')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Export failed')
@@ -1036,6 +1051,45 @@ export default function AdminScheduleView({
     await load()
   }
 
+  async function handleMobileAssign(court: string, kickoff_time: string) {
+    if (!mobileAssignMatch) return
+    setSavingAssignment(true)
+    const { error } = await supabase
+      .from('matches')
+      .update({
+        is_planned: true,
+        court,
+        kickoff_time,
+      })
+      .eq('id', mobileAssignMatch.id)
+    
+    setSavingAssignment(false)
+    if (error) {
+      toast.error(`Could not assign: ${error.message}`)
+      return
+    }
+    toast.success('Match assigned')
+    setMobileAssignMatch(null)
+    await load()
+  }
+
+  async function handleMobileUnplan(matchId: string) {
+    setSavingAssignment(true)
+    const { error } = await supabase
+      .from('matches')
+      .update({ is_planned: false })
+      .eq('id', matchId)
+    
+    setSavingAssignment(false)
+    if (error) {
+      toast.error(`Could not unplan: ${error.message}`)
+      return
+    }
+    toast.success('Match unplanned')
+    setMobileAssignMatch(null)
+    await load()
+  }
+
   function handleCancelPreview() {
     clearPreview()
     toast.success('Preview discarded')
@@ -1123,7 +1177,7 @@ export default function AdminScheduleView({
         <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-50">
           Schedule — {tournament.name}
         </h2>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2">
           {selectedIds.size > 0 && (
             <span className="inline-flex items-center gap-1.5 rounded-md border border-mk-red/40 bg-mk-red/5 px-2 py-1 text-xs font-semibold text-mk-red dark:bg-mk-red/10">
               {selectedIds.size} selected
@@ -1138,88 +1192,195 @@ export default function AdminScheduleView({
               </button>
             </span>
           )}
-          <label className="inline-flex items-center gap-1 text-xs font-medium text-zinc-600 dark:text-zinc-400">
-            Back-to-back &lt;
-            <input
-              type="number"
-              min={0}
-              max={120}
-              step={1}
-              value={backToBackMin}
-              onChange={(e) => {
-                const n = Number(e.target.value)
-                setBackToBackMin(Number.isFinite(n) && n >= 0 ? n : 0)
-              }}
-              className="w-14 rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs tabular-nums text-zinc-900 shadow-sm focus:border-mk-red focus:outline-none focus:ring-1 focus:ring-mk-red dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
-            />
-            min
-          </label>
-          <button
-            type="button"
-            onClick={() => setShowCourtsEditor((s) => !s)}
-            className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-          >
-            {showCourtsEditor ? 'Hide courts' : 'Manage courts'}
-          </button>
-          <button
-            type="button"
-            onClick={handleToggleLock}
-            disabled={savingLock}
-            className={
-              tournament.schedule_locked
-                ? 'rounded-md border border-amber-400 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-900 shadow-sm dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200'
-                : 'rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800'
-            }
-          >
-            {tournament.schedule_locked ? '🔒 Locked' : '🔓 Unlocked'}
-          </button>
-          {!tournament.schedule_locked && (
-            <>
+
+          {/* Desktop Actions */}
+          <div className="hidden lg:flex items-center gap-2">
+            <label className="inline-flex items-center gap-1 text-xs font-medium text-zinc-600 dark:text-zinc-400">
+              Back-to-back &lt;
+              <input
+                type="number"
+                min={0}
+                max={120}
+                step={1}
+                value={backToBackMin}
+                onChange={(e) => {
+                  const n = Number(e.target.value)
+                  setBackToBackMin(Number.isFinite(n) && n >= 0 ? n : 0)
+                }}
+                className="w-14 rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs tabular-nums text-zinc-900 shadow-sm focus:border-mk-red focus:outline-none focus:ring-1 focus:ring-mk-red dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+              />
+              min
+            </label>
+            <button
+              type="button"
+              onClick={() => setShowCourtsEditor((s) => !s)}
+              className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            >
+              {showCourtsEditor ? 'Hide courts' : 'Manage courts'}
+            </button>
+            <button
+              type="button"
+              onClick={handleToggleLock}
+              disabled={savingLock}
+              className={
+                tournament.schedule_locked
+                  ? 'rounded-md border border-amber-400 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-900 shadow-sm dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200'
+                  : 'rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800'
+              }
+            >
+              {tournament.schedule_locked ? '🔒 Locked' : '🔓 Unlocked'}
+            </button>
+            {!tournament.schedule_locked && (
+              <>
+                <button
+                  type="button"
+                  onClick={handleExport}
+                  disabled={matches.length === 0}
+                  title="Download schedule as Excel spreadsheet"
+                  className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800 shadow-sm hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-200 dark:hover:bg-emerald-900"
+                >
+                  Export Excel
+                </button>
+                <label
+                  title="Upload an edited schedule Excel file"
+                  className="cursor-pointer rounded-md border border-sky-300 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-800 shadow-sm hover:bg-sky-100 dark:border-sky-700 dark:bg-sky-950 dark:text-sky-200 dark:hover:bg-sky-900"
+                >
+                  Import Excel
+                  <input
+                    ref={importFileRef}
+                    type="file"
+                    accept=".xlsx,.xls"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0]
+                      if (file) await handleImportFile(file)
+                      e.target.value = ''
+                    }}
+                  />
+                </label>
+              </>
+            )}
+            {tournament.schedule_locked && (
+              <a
+                href={`/admin/scorecards/${day}?t=${tournament.id}`}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-md border border-violet-300 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-800 shadow-sm hover:bg-violet-100 dark:border-violet-700 dark:bg-violet-950 dark:text-violet-200 dark:hover:bg-violet-900"
+              >
+                🖨️ Print scorecards
+              </a>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            >
+              Close
+            </button>
+          </div>
+
+          {/* Mobile Actions */}
+          <div className="flex lg:hidden items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            >
+              Close
+            </button>
+            <div className="relative">
               <button
                 type="button"
-                onClick={handleExport}
-                disabled={matches.length === 0}
-                title="Download schedule as Excel spreadsheet"
-                className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800 shadow-sm hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-200 dark:hover:bg-emerald-900"
+                onClick={() => setShowActionsMenu((s) => !s)}
+                className="flex h-8 w-8 items-center justify-center rounded-md border border-zinc-300 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                aria-label="More actions"
               >
-                Export Excel
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z" />
+                </svg>
               </button>
-              <label
-                title="Upload an edited schedule Excel file"
-                className="cursor-pointer rounded-md border border-sky-300 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-800 shadow-sm hover:bg-sky-100 dark:border-sky-700 dark:bg-sky-950 dark:text-sky-200 dark:hover:bg-sky-900"
-              >
-                Import Excel
-                <input
-                  ref={importFileRef}
-                  type="file"
-                  accept=".xlsx,.xls"
-                  className="hidden"
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0]
-                    if (file) await handleImportFile(file)
-                    e.target.value = ''
-                  }}
-                />
-              </label>
-            </>
-          )}
-          {tournament.schedule_locked && (
-            <a
-              href={`/admin/scorecards/${day}?t=${tournament.id}`}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-md border border-violet-300 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-800 shadow-sm hover:bg-violet-100 dark:border-violet-700 dark:bg-violet-950 dark:text-violet-200 dark:hover:bg-violet-900"
-            >
-              🖨️ Print scorecards
-            </a>
-          )}
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-          >
-            Close
-          </button>
+              {showActionsMenu && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowActionsMenu(false)} />
+                  <div className="absolute right-0 top-full mt-2 w-56 z-50 flex flex-col rounded-md border border-zinc-200 bg-white py-1 shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
+                    <label className="flex items-center justify-between px-4 py-2 text-sm text-zinc-700 dark:text-zinc-300">
+                      Back-to-back &lt;
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          min={0}
+                          max={120}
+                          step={1}
+                          value={backToBackMin}
+                          onChange={(e) => {
+                            const n = Number(e.target.value)
+                            setBackToBackMin(Number.isFinite(n) && n >= 0 ? n : 0)
+                          }}
+                          className="w-14 rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs tabular-nums text-zinc-900 shadow-sm focus:border-mk-red focus:outline-none focus:ring-1 focus:ring-mk-red dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                        />
+                        min
+                      </div>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => { setShowCourtsEditor((s) => !s); setShowActionsMenu(false); }}
+                      className="px-4 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                    >
+                      {showCourtsEditor ? 'Hide courts' : 'Manage courts'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { handleToggleLock(); setShowActionsMenu(false); }}
+                      disabled={savingLock}
+                      className="px-4 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                    >
+                      {tournament.schedule_locked ? '🔒 Unlock schedule' : '🔓 Lock schedule'}
+                    </button>
+                    {!tournament.schedule_locked && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => { handleExport(); setShowActionsMenu(false); }}
+                          disabled={matches.length === 0}
+                          className="px-4 py-2 text-left text-sm text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 dark:text-emerald-400 dark:hover:bg-emerald-950/50"
+                        >
+                          Export Excel
+                        </button>
+                        <label className="block w-full cursor-pointer px-4 py-2 text-sm text-sky-700 hover:bg-sky-50 dark:text-sky-400 dark:hover:bg-sky-950/50">
+                          Import Excel
+                          <input
+                            ref={importFileRef}
+                            type="file"
+                            accept=".xlsx,.xls"
+                            className="hidden"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0]
+                              if (file) {
+                                setShowActionsMenu(false)
+                                await handleImportFile(file)
+                              }
+                              e.target.value = ''
+                            }}
+                          />
+                        </label>
+                      </>
+                    )}
+                    {tournament.schedule_locked && (
+                      <a
+                        href={`/admin/scorecards/${day}?t=${tournament.id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={() => setShowActionsMenu(false)}
+                        className="block px-4 py-2 text-sm text-violet-700 hover:bg-violet-50 dark:text-violet-400 dark:hover:bg-violet-950/50"
+                      >
+                        🖨️ Print scorecards
+                      </a>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1337,39 +1498,73 @@ export default function AdminScheduleView({
           onDragEnd={handleDragEnd}
           onDragCancel={() => setActiveId(null)}
         >
-          <div className="flex gap-3">
-            <UnplannedColumn
-              matches={filteredUnplanned}
-              totalUnplanned={unplanned.length}
-              plannedCount={planned.length}
-              filterValue={unplannedFilter}
-              filterOptions={unplannedGroupOptions}
-              onFilterChange={setUnplannedFilter}
-              locked={tournament.schedule_locked}
-              hasCourts={sortedCourts.length > 0}
-              isPreviewMode={isPreviewMode}
-              planning={planning}
-              unplanningAll={unplanningAll}
-              onAutoPlan={openAutoPlanDialog}
-              onUnplanAll={openUnplanDialog}
-              onRegenerate={() => setRegeneratingGroupId(unplannedFilter)}
-              isRegenerating={isRegenerating}
-              selectedIds={selectedIds}
-              onToggleSelected={toggleSelected}
-            />
-            <ScheduleGrid
-              courts={sortedCourts}
-              matches={effectivePlanned}
-              lanesByCourt={lanesByCourt}
-              courtClashIds={courtClashIds}
-              backToBackIds={backToBackIds}
-              locked={tournament.schedule_locked}
-              gridStartMin={gridStartMin}
-              totalSlots={totalSlots}
-              selectedIds={selectedIds}
-              onToggleSelected={toggleSelected}
-              onClearSelection={clearSelection}
-            />
+          {/* Mobile Tabs */}
+          <div className="flex rounded-md border border-zinc-300 bg-white p-1 dark:border-zinc-700 dark:bg-zinc-950 lg:hidden">
+            <button
+              type="button"
+              onClick={() => setMobileTab('unplanned')}
+              className={`flex-1 rounded px-3 py-1.5 text-sm font-semibold transition-colors ${
+                mobileTab === 'unplanned'
+                  ? 'bg-zinc-100 text-zinc-900 shadow-sm dark:bg-zinc-800 dark:text-zinc-50'
+                  : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'
+              }`}
+            >
+              Unplanned ({unplanned.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setMobileTab('courts')}
+              className={`flex-1 rounded px-3 py-1.5 text-sm font-semibold transition-colors ${
+                mobileTab === 'courts'
+                  ? 'bg-zinc-100 text-zinc-900 shadow-sm dark:bg-zinc-800 dark:text-zinc-50'
+                  : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'
+              }`}
+            >
+              Courts
+            </button>
+          </div>
+
+          <div className="flex flex-col gap-3 lg:flex-row">
+            <div className={`w-full lg:w-auto lg:shrink-0 ${mobileTab === 'unplanned' ? 'block' : 'hidden lg:block'}`}>
+              <UnplannedColumn
+                matches={filteredUnplanned}
+                totalUnplanned={unplanned.length}
+                plannedCount={planned.length}
+                filterValue={unplannedFilter}
+                filterOptions={unplannedGroupOptions}
+                onFilterChange={setUnplannedFilter}
+                locked={tournament.schedule_locked}
+                hasCourts={sortedCourts.length > 0}
+                isPreviewMode={isPreviewMode}
+                planning={planning}
+                unplanningAll={unplanningAll}
+                onAutoPlan={openAutoPlanDialog}
+                onUnplanAll={openUnplanDialog}
+                onRegenerate={() => setRegeneratingGroupId(unplannedFilter)}
+                isRegenerating={isRegenerating}
+                selectedIds={selectedIds}
+                onToggleSelected={toggleSelected}
+                onMobileAssign={(m) => setMobileAssignMatch(m)}
+              />
+            </div>
+            <div className={`flex-1 overflow-hidden ${mobileTab === 'courts' ? 'block' : 'hidden lg:block'}`}>
+              <ScheduleGrid
+                courts={sortedCourts}
+                matches={effectivePlanned}
+                lanesByCourt={lanesByCourt}
+                courtClashIds={courtClashIds}
+                backToBackIds={backToBackIds}
+                locked={tournament.schedule_locked}
+                gridStartMin={gridStartMin}
+                totalSlots={totalSlots}
+                selectedIds={selectedIds}
+                onToggleSelected={toggleSelected}
+                onClearSelection={clearSelection}
+                mobileSelectedCourt={mobileSelectedCourt}
+                onMobileCourtChange={setMobileSelectedCourt}
+                onMobileAssign={(m) => setMobileAssignMatch(m)}
+              />
+            </div>
           </div>
           <DragOverlay>
             {activeMatch ? (
@@ -1431,10 +1626,25 @@ export default function AdminScheduleView({
         />
       )}
 
+      {mobileAssignMatch && (
+        <MobileAssignDialog
+          match={mobileAssignMatch}
+          courts={sortedCourts}
+          gridStartMin={gridStartMin}
+          totalSlots={totalSlots}
+          courtWindowByName={courtWindowByName}
+          baseIso={dateForDay(tournament, day) ? `${dateForDay(tournament, day)}T08:00:00.000Z` : new Date().toISOString()}
+          saving={savingAssignment}
+          onCancel={() => setMobileAssignMatch(null)}
+          onAssign={handleMobileAssign}
+          onUnplan={handleMobileUnplan}
+        />
+      )}
+
       {regeneratingGroupId && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          onMouseDown={(e) => {
+          onClick={(e) => {
             if (e.target === e.currentTarget && !isRegenerating) setRegeneratingGroupId(null)
           }}
         >
@@ -1523,7 +1733,7 @@ function AutoPlanDialog({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onMouseDown={(e) => {
+      onClick={(e) => {
         if (e.target === e.currentTarget) onCancel()
       }}
     >
@@ -1682,7 +1892,7 @@ function UnplanDialog({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onMouseDown={(e) => {
+      onClick={(e) => {
         if (e.target === e.currentTarget) onCancel()
       }}
     >
@@ -1795,7 +2005,7 @@ function ImportConfirmDialog({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onMouseDown={(e) => {
+      onClick={(e) => {
         if (e.target === e.currentTarget && !importing) onCancel()
       }}
     >
@@ -1855,6 +2065,163 @@ function ImportConfirmDialog({
   )
 }
 
+function MobileAssignDialog({
+  match,
+  courts,
+  gridStartMin,
+  totalSlots,
+  courtWindowByName,
+  baseIso,
+  saving,
+  onCancel,
+  onAssign,
+  onUnplan,
+}: {
+  match: MatchWithMeta
+  courts: Court[]
+  gridStartMin: number
+  totalSlots: number
+  courtWindowByName: Map<string, { startMin: number; endMin: number }>
+  baseIso: string
+  saving: boolean
+  onCancel: () => void
+  onAssign: (court: string, kickoffTime: string) => Promise<void>
+  onUnplan: (id: string) => Promise<void>
+}) {
+  const [court, setCourt] = useState(match.court ?? courts[0]?.name ?? '')
+  const [slotIdx, setSlotIdx] = useState<number>(0)
+
+  useEffect(() => {
+    const window = courtWindowByName.get(court)
+    if (window) {
+      if (match.is_planned && match.kickoff_time && match.court === court) {
+        const matchMin = minutesFromIso(match.kickoff_time)
+        setSlotIdx(Math.floor((matchMin - gridStartMin) / 5))
+      } else {
+        const idx = Math.max(0, Math.floor((window.startMin - gridStartMin) / 5))
+        setSlotIdx(idx)
+      }
+    }
+  }, [court, courtWindowByName, gridStartMin, match.is_planned, match.court, match.kickoff_time])
+
+  const timeOptions = useMemo(() => {
+    const options = []
+    const window = courtWindowByName.get(court)
+    if (window) {
+      for (let i = 0; i < totalSlots; i++) {
+        const slotMin = gridStartMin + i * 5
+        if (slotMin >= window.startMin && slotMin <= window.endMin - match.duration_minutes) {
+          options.push({ idx: i, label: minutesToHHMM(slotMin) })
+        }
+      }
+    }
+    return options
+  }, [court, courtWindowByName, gridStartMin, totalSlots, match.duration_minutes])
+
+  useEffect(() => {
+    if (timeOptions.length > 0 && !timeOptions.find(o => o.idx === slotIdx)) {
+      setSlotIdx(timeOptions[0].idx)
+    }
+  }, [timeOptions, slotIdx])
+
+  async function handleConfirm() {
+    const startMin = gridStartMin + slotIdx * 5
+    const kickoff_time = buildIsoFromLondonTime(baseIso, minutesToHHMM(startMin))
+    await onAssign(court, kickoff_time)
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !saving) onCancel()
+      }}
+    >
+      <div className="w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-950 sm:rounded-lg">
+        <header className="mb-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-mk-red">
+            {match.is_planned ? 'Edit match' : 'Assign match'}
+          </p>
+          <h3 className="mt-1 text-base font-bold text-zinc-900 dark:text-zinc-50">
+            {match.homeName} vs {match.awayName}
+          </h3>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            {match.duration_minutes} mins
+          </p>
+        </header>
+
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              Court
+            </label>
+            <select
+              value={court}
+              onChange={(e) => setCourt(e.target.value)}
+              className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-mk-red focus:outline-none focus:ring-1 focus:ring-mk-red dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+            >
+              {courts.map((c) => (
+                <option key={c.id} value={c.name}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              Kickoff time
+            </label>
+            <select
+              value={slotIdx}
+              onChange={(e) => setSlotIdx(Number(e.target.value))}
+              className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-mk-red focus:outline-none focus:ring-1 focus:ring-mk-red dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+            >
+              {timeOptions.length === 0 && (
+                <option value={0} disabled>No times available</option>
+              )}
+              {timeOptions.map((o) => (
+                <option key={o.idx} value={o.idx}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="mt-6 flex justify-end gap-2">
+          {match.is_planned && (
+            <button
+              type="button"
+              onClick={() => onUnplan(match.id)}
+              disabled={saving}
+              className="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 shadow-sm hover:bg-zinc-50 disabled:opacity-50 touch-manipulation dark:border-zinc-700 dark:bg-zinc-900 dark:text-red-400 dark:hover:bg-zinc-800"
+            >
+              Unplan
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={saving}
+            className="flex-1 rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50 disabled:opacity-50 touch-manipulation dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleConfirm}
+            disabled={saving || timeOptions.length === 0}
+            className="flex-1 rounded-md bg-mk-red px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-mk-red/90 disabled:opacity-50 touch-manipulation"
+          >
+            {saving ? 'Saving…' : (match.is_planned ? 'Update' : 'Assign')}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function UnplannedColumn({
   matches,
   totalUnplanned,
@@ -1873,6 +2240,7 @@ function UnplannedColumn({
   isRegenerating,
   selectedIds,
   onToggleSelected,
+  onMobileAssign,
 }: {
   matches: MatchWithMeta[]
   totalUnplanned: number
@@ -1891,6 +2259,7 @@ function UnplannedColumn({
   isRegenerating: boolean
   selectedIds: Set<string>
   onToggleSelected: (id: string, additive: boolean) => void
+  onMobileAssign: (m: MatchWithMeta) => void
 }) {
   const { isOver, setNodeRef } = useDroppable({ id: 'unplanned' })
   const filtered = filterValue !== 'all'
@@ -1903,7 +2272,7 @@ function UnplannedColumn({
   return (
     <div
       ref={setNodeRef}
-      className={`flex w-64 shrink-0 flex-col rounded-lg border ${
+      className={`flex w-full flex-col rounded-lg border lg:w-64 ${
         isOver
           ? 'border-mk-red bg-mk-red/5'
           : 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-zinc-950'
@@ -2004,6 +2373,7 @@ function UnplannedColumn({
               locked={locked}
               selected={selectedIds.has(m.id)}
               onToggleSelected={onToggleSelected}
+              onAssign={() => onMobileAssign(m)}
             />
           ))
         )}
@@ -2024,6 +2394,9 @@ function ScheduleGrid({
   selectedIds,
   onToggleSelected,
   onClearSelection,
+  mobileSelectedCourt,
+  onMobileCourtChange,
+  onMobileAssign,
 }: {
   courts: Court[]
   matches: MatchWithMeta[]
@@ -2036,7 +2409,14 @@ function ScheduleGrid({
   selectedIds: Set<string>
   onToggleSelected: (id: string, additive: boolean) => void
   onClearSelection: () => void
+  mobileSelectedCourt: string
+  onMobileCourtChange: (court: string) => void
+  onMobileAssign: (m: MatchWithMeta) => void
 }) {
+  const topScrollRef = useRef<HTMLDivElement>(null)
+  const bottomScrollRef = useRef<HTMLDivElement>(null)
+  const gridWidth = 48 + courts.length * 200
+
   const gridDurationMin = totalSlots * SLOT_MINUTES
   // Anchor labels to the next 30-min tick at or after gridStartMin so the
   // 5-min top buffer doesn't shift HH:MM labels off their natural ticks.
@@ -2045,17 +2425,56 @@ function ScheduleGrid({
     Math.floor((gridStartMin + gridDurationMin - firstLabelMin) / 30) + 1
   return (
     <div
-      className="flex-1 overflow-x-auto rounded-lg border border-zinc-300 bg-white dark:border-zinc-700 dark:bg-zinc-950"
-      onMouseDown={(e) => {
-        // Click on empty grid background (not a card or droppable slot)
-        // clears the multi-select.
-        const target = e.target as HTMLElement
-        if (!target.closest('[data-match-card="true"]')) {
-          if (!e.shiftKey && !e.metaKey && !e.ctrlKey) onClearSelection()
-        }
-      }}
+      className="flex flex-1 flex-col overflow-hidden rounded-lg border border-zinc-300 bg-white dark:border-zinc-700 dark:bg-zinc-950"
     >
+      {/* Mobile Court Selector */}
+      {courts.length > 0 && (
+        <div className="border-b border-zinc-200 bg-zinc-50 p-2 dark:border-zinc-800 dark:bg-zinc-900 lg:hidden">
+          <select
+            value={mobileSelectedCourt}
+            onChange={(e) => onMobileCourtChange(e.target.value)}
+            className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm font-semibold text-zinc-900 shadow-sm focus:border-mk-red focus:outline-none focus:ring-1 focus:ring-mk-red dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
+          >
+            {courts.map((c) => (
+              <option key={c.id} value={c.name}>
+                {c.name} ({c.start_time}–{c.end_time})
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* Top Scrollbar (Desktop only) */}
+      <div 
+        className="hidden overflow-x-auto border-b border-zinc-200 dark:border-zinc-800 lg:block"
+        ref={topScrollRef}
+        onScroll={(e) => {
+          if (bottomScrollRef.current && bottomScrollRef.current.scrollLeft !== e.currentTarget.scrollLeft) {
+            bottomScrollRef.current.scrollLeft = e.currentTarget.scrollLeft
+          }
+        }}
+      >
+        <div style={{ width: gridWidth, height: '1px' }} />
+      </div>
+
       <div
+        className="flex-1 overflow-x-auto"
+        ref={bottomScrollRef}
+        onScroll={(e) => {
+          if (topScrollRef.current && topScrollRef.current.scrollLeft !== e.currentTarget.scrollLeft) {
+            topScrollRef.current.scrollLeft = e.currentTarget.scrollLeft
+          }
+        }}
+        onMouseDown={(e) => {
+          // Click on empty grid background (not a card or droppable slot)
+          // clears the multi-select.
+          const target = e.target as HTMLElement
+          if (!target.closest('[data-match-card="true"]')) {
+            if (!e.shiftKey && !e.metaKey && !e.ctrlKey) onClearSelection()
+          }
+        }}
+      >
+        <div
         className="relative flex"
         style={{ minHeight: totalSlots * SLOT_PX + 32 }}
       >
@@ -2089,8 +2508,9 @@ function ScheduleGrid({
           return (
             <div
               key={court.id}
-              className="border-r border-zinc-200 dark:border-zinc-800"
-              style={{ width: COLUMN_WIDTH_PX }}
+              className={`border-r border-zinc-200 dark:border-zinc-800 lg:w-[200px] lg:shrink-0 lg:flex-none lg:block ${
+                court.name === mobileSelectedCourt ? 'flex-1 block' : 'hidden'
+              }`}
             >
               <header className="sticky top-0 z-10 h-8 border-b border-zinc-200 bg-zinc-50 px-2 text-center text-xs font-semibold leading-8 text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200">
                 <span>{court.name}</span>
@@ -2111,11 +2531,13 @@ function ScheduleGrid({
                 courtEndMin={endMin}
                 selectedIds={selectedIds}
                 onToggleSelected={onToggleSelected}
+                onAssign={onMobileAssign}
               />
             </div>
           )
         })}
       </div>
+    </div>
     </div>
   )
 }
@@ -2133,6 +2555,7 @@ function CourtColumnDroppable({
   courtEndMin,
   selectedIds,
   onToggleSelected,
+  onAssign,
 }: {
   court: Court
   matches: MatchWithMeta[]
@@ -2146,6 +2569,7 @@ function CourtColumnDroppable({
   courtEndMin: number
   selectedIds: Set<string>
   onToggleSelected: (id: string, additive: boolean) => void
+  onAssign: (m: MatchWithMeta) => void
 }) {
   return (
     <div className="relative" style={{ height: totalSlots * SLOT_PX }}>
@@ -2183,6 +2607,7 @@ function CourtColumnDroppable({
             backToBack={backToBackIds.has(m.id)}
             selected={selectedIds.has(m.id)}
             onToggleSelected={onToggleSelected}
+            onAssign={() => onAssign(m)}
             style={{
               position: 'absolute',
               top,
@@ -2238,6 +2663,7 @@ function DraggableMatch({
   backToBack = false,
   selected = false,
   onToggleSelected,
+  onAssign,
   style,
 }: {
   match: MatchWithMeta
@@ -2246,12 +2672,15 @@ function DraggableMatch({
   backToBack?: boolean
   selected?: boolean
   onToggleSelected?: (id: string, additive: boolean) => void
+  onAssign?: () => void
   style?: React.CSSProperties
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: match.id,
     disabled: locked,
   })
+  const lastClickTime = useRef(0)
+
   return (
     <div
       ref={setNodeRef}
@@ -2259,6 +2688,17 @@ function DraggableMatch({
       {...listeners}
       {...attributes}
       onClick={(e) => {
+        const now = Date.now()
+        if (now - lastClickTime.current < 300) {
+          lastClickTime.current = 0
+          if (onAssign) {
+            onAssign()
+            e.stopPropagation()
+            return
+          }
+        }
+        lastClickTime.current = now
+
         if (!onToggleSelected) return
         // PointerSensor's 5px activation threshold means a true drag won't
         // fire onClick — so this only runs for taps/clicks.
@@ -2279,6 +2719,7 @@ function DraggableMatch({
         courtClash={courtClash}
         backToBack={backToBack}
         selected={selected}
+        onAssign={onAssign}
       />
     </div>
   )
@@ -2291,6 +2732,7 @@ function MatchCard({
   backToBack = false,
   selected = false,
   groupCount = 0,
+  onAssign,
 }: {
   match: MatchWithMeta
   dragging?: boolean
@@ -2298,6 +2740,7 @@ function MatchCard({
   backToBack?: boolean
   selected?: boolean
   groupCount?: number
+  onAssign?: () => void
 }) {
   const c = match.groupColor
   const completed = match.status === 'completed'

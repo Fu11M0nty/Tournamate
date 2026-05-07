@@ -1,4 +1,4 @@
-import { createServerSupabaseClient } from '@/lib/supabase'
+import { createPublicSupabaseClient } from '@/lib/supabase'
 import TournamentView from '@/components/TournamentView'
 import NotFoundMessage from '@/components/NotFoundMessage'
 import type { AgeGroup, Day, Match, Team, Tournament } from '@/lib/types'
@@ -21,7 +21,7 @@ export default async function AgeGroupPage({ params, searchParams }: Props) {
     return <NotFoundMessage title="Group not found" />
   }
 
-  const supabase = await createServerSupabaseClient()
+  const supabase = await createPublicSupabaseClient()
 
   const { data: tournamentData } = await supabase
     .from('tournaments')

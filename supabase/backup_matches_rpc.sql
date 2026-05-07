@@ -10,6 +10,10 @@
 -- this file to (re)create the function and grant authenticated access.
 -- =============================================================================
 
+-- INTENTIONAL RLS BYPASS: this function is security definer so it can read
+-- all matches regardless of the caller's tournament ownership. A backup must
+-- capture the full dataset. Access is still gated to authenticated users only
+-- via the GRANT below — anonymous callers cannot invoke it.
 create or replace function backup_matches()
 returns table (rows_backed_up bigint, backed_up_at timestamptz)
 language plpgsql

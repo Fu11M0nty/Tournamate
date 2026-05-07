@@ -43,10 +43,10 @@ export default function StandingsTable({
                 ? 'bg-white dark:bg-zinc-950'
                 : 'bg-zinc-50 dark:bg-zinc-900/40'
             const leaderBg = isLeader
-              ? 'bg-mk-gold/10 dark:bg-mk-gold/10'
+              ? 'bg-tm-orange/10 dark:bg-tm-orange/10'
               : stripe
             const positionBadge = isLeader
-              ? 'bg-mk-red text-white'
+              ? 'bg-tm-orange text-white'
               : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400'
             return (
               <tr

@@ -26,8 +26,8 @@ export default function TeamFilter({
             aria-current={currentTeamId === null ? 'true' : undefined}
             className={
               currentTeamId === null
-                ? 'inline-flex h-12 items-center rounded-full bg-mk-red px-4 text-xs font-bold uppercase tracking-wider text-white shadow-sm'
-                : 'inline-flex h-12 items-center rounded-full border border-mk-ink/15 bg-white px-4 text-xs font-bold uppercase tracking-wider text-mk-ink hover:border-mk-red hover:text-mk-red dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200'
+                ? 'inline-flex h-12 items-center rounded-full bg-tm-orange px-4 text-xs font-bold uppercase tracking-wider text-white shadow-sm'
+                : 'inline-flex h-12 items-center rounded-full border border-tm-navy/15 bg-white px-4 text-xs font-bold uppercase tracking-wider text-tm-navy hover:border-tm-orange hover:text-tm-orange dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200'
             }
           >
             All teams
@@ -46,8 +46,8 @@ export default function TeamFilter({
                 title={team.name}
                 className={
                   active
-                    ? 'inline-flex h-12 w-12 items-center justify-center rounded-full bg-mk-red p-0.5 shadow-sm ring-2 ring-mk-red ring-offset-2 ring-offset-mk-cream dark:ring-offset-zinc-950'
-                    : 'inline-flex h-12 w-12 items-center justify-center rounded-full bg-white p-0.5 ring-1 ring-mk-ink/15 transition-colors hover:ring-mk-red dark:bg-zinc-900 dark:ring-zinc-700'
+                    ? 'inline-flex h-12 w-12 items-center justify-center rounded-full bg-tm-orange p-0.5 shadow-sm ring-2 ring-tm-orange ring-offset-2 ring-offset-white dark:ring-offset-zinc-950'
+                    : 'inline-flex h-12 w-12 items-center justify-center rounded-full bg-white p-0.5 ring-1 ring-tm-navy/15 transition-colors hover:ring-tm-orange dark:bg-zinc-900 dark:ring-zinc-700'
                 }
               >
                 <TeamLogo team={team} size="md" />

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import toast from 'react-hot-toast'
 import CourtEditForm from './CourtEditForm'
+import ConfirmDialog from './ConfirmDialog'
 import { createClient } from '@/lib/supabase'
 import type { Court, Day } from '@/lib/types'
 
@@ -22,6 +23,7 @@ export default function CourtsManager({
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<Court | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<Court | null>(null)
 
   const supabase = createClient()
 
@@ -34,14 +36,8 @@ export default function CourtsManager({
   const nextOrder =
     sorted.reduce((max, c) => Math.max(max, c.display_order), 0) + 1
 
-  async function handleDelete(c: Court) {
-    if (
-      !window.confirm(
-        `Remove "${c.name}" from this tournament? Matches already scheduled on this court will keep their court text but won't show as a column.`
-      )
-    ) {
-      return
-    }
+  async function confirmDelete(c: Court) {
+    setPendingDelete(null)
     setBusyId(c.id)
     const { data, error } = await supabase
       .from('courts')
@@ -107,7 +103,7 @@ export default function CourtsManager({
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleDelete(c)}
+                  onClick={() => setPendingDelete(c)}
                   disabled={busyId === c.id}
                   className="rounded-md border border-red-300 bg-white px-2 py-1 text-xs font-semibold text-red-700 shadow-sm hover:bg-red-50 disabled:opacity-60 dark:border-red-900 dark:bg-zinc-900 dark:text-red-400 dark:hover:bg-red-950"
                 >
@@ -143,6 +139,15 @@ export default function CourtsManager({
             onChanged()
           }}
           onCancel={() => setEditing(null)}
+        />
+      )}
+      {pendingDelete && (
+        <ConfirmDialog
+          title={`Remove "${pendingDelete.name}"?`}
+          message={`Matches already scheduled on this court will keep their court label but the court won't appear as a column.`}
+          confirmLabel="Remove court"
+          onConfirm={() => confirmDelete(pendingDelete)}
+          onCancel={() => setPendingDelete(null)}
         />
       )}
     </div>

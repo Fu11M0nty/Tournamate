@@ -16,9 +16,16 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MK Netters & MK Dons Tournament",
+  title: "TournaMate — Grassroots Tournament Platform",
   description:
-    "Live standings, results and fixtures for the MK Netters & MK Dons weekend tournament.",
+    "Discover and manage sports tournaments. Live standings, results and fixtures for netball, football and more.",
+  icons: {
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/Tournamate.png', type: 'image/png' },
+    ],
+    apple: '/Tournamate.png',
+  },
 };
 
 export default function RootLayout({
@@ -31,7 +38,7 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-mk-cream text-mk-ink dark:bg-[#070b15] dark:text-zinc-100">
+      <body className="min-h-full flex flex-col bg-tm-slate text-tm-navy dark:bg-[#070b15] dark:text-zinc-100">
         <SiteHeader />
         <div className="flex-1">{children}</div>
         <SiteFooter />

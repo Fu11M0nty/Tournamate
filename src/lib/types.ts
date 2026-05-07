@@ -1,6 +1,34 @@
 export type Day = 'saturday' | 'sunday'
 
+export type UserRole = 'superadmin' | 'tournament_admin'
+
+export interface UserProfile {
+  id: string
+  role: UserRole
+  created_at: string
+}
+
 export type TournamentStatus = 'upcoming' | 'live' | 'complete'
+
+export const SPORTS = [
+  'Netball',
+  'Football',
+  'Basketball',
+  'Hockey (Field)',
+  'Rugby Union',
+  'Rugby League',
+  'Cricket',
+  'Volleyball',
+  'Tennis',
+  'Badminton',
+  'Swimming',
+  'Athletics',
+  'Tag Rugby',
+  'Futsal',
+  'Other',
+] as const
+
+export type Sport = typeof SPORTS[number]
 
 export interface Tournament {
   id: string
@@ -12,6 +40,15 @@ export interface Tournament {
   display_order: number
   courts: string[]
   schedule_locked: boolean
+  created_by: string
+  // TournaMate fields — added by add_tournamate_fields.sql migration
+  sport?: string | null
+  venue_name?: string | null
+  venue_city?: string | null
+  venue_county?: string | null
+  venue_postcode?: string | null
+  description?: string | null
+  is_public?: boolean
 }
 
 export type MatchFormat = 'continuous' | 'halves' | 'quarters'

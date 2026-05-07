@@ -23,20 +23,21 @@ export default async function CaptureByCodePage({ params }: Props) {
       .single()
     match = data
   } else {
-    // Short code search for manual entry
-    const cleanCode = code.toLowerCase().replace(/[^a-z0-9]/g, '')
-    const { data: allMatches } = await supabase
-      .from('matches')
-      .select('id')
-      .is('deleted_at', null)
-
-    const found = allMatches?.find((m) => m.id.replace(/-/g, '').startsWith(cleanCode))
-    if (found) {
+    // Short code is the first 8 hex chars of the UUID without dashes.
+    // PostgreSQL's UUID type does not support LIKE, but does support >= / <=.
+    // All UUIDs sharing the same 8-char prefix fall in the range
+    //   [prefix-0000-0000-0000-000000000000, prefix-ffff-ffff-ffff-ffffffffffff]
+    // so a range query gives us a single-pass, index-friendly prefix scan.
+    const cleanCode = code.toLowerCase().replace(/[^a-f0-9]/g, '').slice(0, 8)
+    if (cleanCode.length === 8) {
       const { data } = await supabase
         .from('matches')
         .select('*')
-        .eq('id', found.id)
-        .single()
+        .gte('id', `${cleanCode}-0000-0000-0000-000000000000`)
+        .lte('id', `${cleanCode}-ffff-ffff-ffff-ffffffffffff`)
+        .is('deleted_at', null)
+        .limit(1)
+        .maybeSingle()
       match = data
     }
   }

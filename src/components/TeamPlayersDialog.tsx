@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
 import { createClient } from '@/lib/supabase'
+import ConfirmDialog from './ConfirmDialog'
 import type { Player, Team } from '@/lib/types'
 
 interface TeamPlayersDialogProps {
@@ -35,6 +36,7 @@ export default function TeamPlayersDialog({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [savingDraft, setSavingDraft] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<Player | null>(null)
 
   const supabase = createClient()
 
@@ -113,8 +115,8 @@ export default function TeamPlayersDialog({
     await load()
   }
 
-  async function handleDelete(p: Player) {
-    if (!window.confirm(`Remove ${p.name} from the roster?`)) return
+  async function confirmDelete(p: Player) {
+    setPendingDelete(null)
     setBusyId(p.id)
     const { data, error } = await supabase
       .from('players')
@@ -205,7 +207,7 @@ export default function TeamPlayersDialog({
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleDelete(p)}
+                    onClick={() => setPendingDelete(p)}
                     disabled={busyId === p.id}
                     className="rounded-md border border-red-300 bg-white px-3 py-1 text-xs font-semibold text-red-700 shadow-sm hover:bg-red-50 disabled:opacity-60 dark:border-red-900 dark:bg-zinc-900 dark:text-red-400 dark:hover:bg-red-950"
                   >
@@ -288,6 +290,15 @@ export default function TeamPlayersDialog({
           </div>
         </section>
       </div>
+      {pendingDelete && (
+        <ConfirmDialog
+          title={`Remove "${pendingDelete.name}"?`}
+          message={`This will remove ${pendingDelete.name} from the ${team.name} roster.`}
+          confirmLabel="Remove player"
+          onConfirm={() => confirmDelete(pendingDelete)}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
     </div>
   )
 }

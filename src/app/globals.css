@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #fef9f3;
-  --foreground: #0b1221;
+  --background: #f4f6f9;
+  --foreground: #1a2d4f;
 }
 
 @theme inline {
@@ -11,6 +11,7 @@
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 
+  /* MK Netters palette — kept for admin console */
   --color-mk-red: #e11d2d;
   --color-mk-red-dark: #b8121f;
   --color-mk-red-soft: #fde8ea;
@@ -19,6 +20,15 @@
   --color-mk-gold: #f5b700;
   --color-mk-gold-soft: #fff5d1;
   --color-mk-cream: #fef9f3;
+
+  /* TournaMate palette — public site & tournament pages */
+  --color-tm-navy: #1a2d4f;
+  --color-tm-navy-soft: #243a61;
+  --color-tm-orange: #f47c20;
+  --color-tm-orange-dark: #d4680f;
+  --color-tm-orange-soft: #fef3e8;
+  --color-tm-sky: #4a9fd4;
+  --color-tm-slate: #f4f6f9;
 }
 
 @media (prefers-color-scheme: dark) {

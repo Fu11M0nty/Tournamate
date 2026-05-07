@@ -13,6 +13,12 @@
 --   ]
 --
 -- Returns the number of rows updated. Re-runnable (CREATE OR REPLACE).
+--
+-- Access control:
+--   • Superadmins may commit schedules for any tournament.
+--   • Tournament admins may only commit schedules for tournaments they own.
+--     If any match in the plan belongs to another organiser's tournament the
+--     entire batch is rejected (all-or-nothing).
 -- =============================================================================
 
 create or replace function commit_schedule(plan jsonb)
@@ -30,13 +36,28 @@ begin
     raise exception 'plan must be a jsonb array';
   end if;
 
+  -- Ownership guard: tournament_admin callers may only commit matches that
+  -- belong to tournaments they created. Superadmins bypass this check.
+  if public.get_my_role() <> 'superadmin' then
+    if exists (
+      select 1
+      from jsonb_array_elements(plan) item
+      join matches m    on m.id  = (item->>'id')::uuid
+      join age_groups ag on ag.id = m.age_group_id
+      join tournaments t  on t.id  = ag.tournament_id
+      where t.created_by <> auth.uid()
+    ) then
+      raise exception 'Access denied: plan contains matches from tournaments you do not own';
+    end if;
+  end if;
+
   for item in select * from jsonb_array_elements(plan)
   loop
     update matches
       set
-        court = item->>'court',
+        court        = item->>'court',
         kickoff_time = (item->>'kickoff_time')::timestamptz,
-        is_planned = true
+        is_planned   = true
       where id = (item->>'id')::uuid;
     get diagnostics affected = row_count;
     rows_updated := rows_updated + affected;

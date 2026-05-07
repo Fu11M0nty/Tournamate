@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 365 68">
+  <title>TournaMate</title>
+  <defs>
+    <!-- Converts mark to solid white while preserving transparency -->
+    <filter id="to-white" color-interpolation-filters="sRGB">
+      <feColorMatrix type="matrix" values="0 0 0 0 1
+                                           0 0 0 0 1
+                                           0 0 0 0 1
+                                           0 0 0 1 0"/>
+    </filter>
+    <!-- Soft drop shadow for main text -->
+    <filter id="text-shadow" x="-5%" y="-10%" width="120%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000000" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+  <!-- Mark: white version -->
+  <svg x="0" y="2" width="74" height="64" viewBox="420 0 560 500" overflow="hidden">
+    <image href="Tournamate-removebg-preview2.svg" x="0" y="0" width="1436" height="696" filter="url(#to-white)"/>
+  </svg>
+  <!-- 3D extrude layer 2 — furthest back -->
+  <text transform="translate(1.5,1.5)" y="50" font-family="Nunito, Poppins, 'Arial Rounded MT Bold', system-ui, sans-serif" font-weight="900" font-size="44" fill="#ffffff" fill-opacity="0.25">
+    <tspan x="82">Tourna</tspan><tspan>Mate</tspan>
+  </text>
+  <!-- 3D extrude layer 1 — mid depth -->
+  <text transform="translate(0.75,0.75)" y="50" font-family="Nunito, Poppins, 'Arial Rounded MT Bold', system-ui, sans-serif" font-weight="900" font-size="44" fill="#ffffff" fill-opacity="0.55">
+    <tspan x="82">Tourna</tspan><tspan>Mate</tspan>
+  </text>
+  <!-- Main text — front face -->
+  <text y="50" font-family="Nunito, Poppins, 'Arial Rounded MT Bold', system-ui, sans-serif" font-weight="900" font-size="44" fill="#ffffff" filter="url(#text-shadow)">
+    <tspan x="82">Tourna</tspan><tspan>Mate</tspan>
+  </text>
+</svg>

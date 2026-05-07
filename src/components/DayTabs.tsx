@@ -29,7 +29,7 @@ export default function DayTabs({ tournamentSlug, days, currentDay }: DayTabsPro
         const base =
           'inline-flex items-center justify-center rounded-t-lg px-5 py-3 text-sm font-semibold tracking-wide transition-colors'
         const classes = active
-          ? `${base} bg-mk-red text-white shadow-sm`
+          ? `${base} bg-tm-orange text-white shadow-sm`
           : enabled
             ? `${base} text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900`
             : `${base} cursor-not-allowed text-zinc-300 dark:text-zinc-700`

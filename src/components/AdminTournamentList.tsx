@@ -4,6 +4,7 @@ import { useState } from 'react'
 import toast from 'react-hot-toast'
 import TournamentEditForm from './TournamentEditForm'
 import TournamentCloneForm from './TournamentCloneForm'
+import ConfirmDialog from './ConfirmDialog'
 import { createClient } from '@/lib/supabase'
 import type { Tournament } from '@/lib/types'
 
@@ -34,15 +35,10 @@ export default function AdminTournamentList({
   const [editing, setEditing] = useState<Tournament | null>(null)
   const [cloning, setCloning] = useState<Tournament | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<Tournament | null>(null)
 
-  async function handleDelete(t: Tournament) {
-    if (
-      !window.confirm(
-        `Delete "${t.name}" and ALL its age groups, teams and matches? This cannot be undone.`
-      )
-    ) {
-      return
-    }
+  async function confirmDelete(t: Tournament) {
+    setPendingDelete(null)
     setDeletingId(t.id)
     const supabase = createClient()
     const { data, error } = await supabase
@@ -107,28 +103,28 @@ export default function AdminTournamentList({
                   {t.display_order}
                 </p>
               </div>
-              <div className="flex shrink-0 flex-wrap gap-2">
+              <div className="mt-1 flex w-full shrink-0 gap-2 sm:mt-0 sm:w-auto">
                 <button
                   type="button"
                   onClick={() => setEditing(t)}
-                  className="rounded-md border border-zinc-300 bg-white px-3 py-1 text-xs font-semibold text-zinc-700 shadow-sm transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 sm:flex-none"
                 >
-                  Edit
+                  ✏️ <span className="hidden sm:inline">Edit</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setCloning(t)}
-                  className="rounded-md border border-zinc-300 bg-white px-3 py-1 text-xs font-semibold text-zinc-700 shadow-sm transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 sm:flex-none"
                 >
-                  Clone
+                  📋 <span className="hidden sm:inline">Clone</span>
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleDelete(t)}
+                  onClick={() => setPendingDelete(t)}
                   disabled={deletingId === t.id}
-                  className="rounded-md border border-red-300 bg-white px-3 py-1 text-xs font-semibold text-red-700 shadow-sm transition-colors hover:bg-red-50 disabled:opacity-60 dark:border-red-900 dark:bg-zinc-900 dark:text-red-400 dark:hover:bg-red-950"
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 shadow-sm transition-colors hover:bg-red-50 disabled:opacity-60 dark:border-red-900 dark:bg-zinc-900 dark:text-red-400 dark:hover:bg-red-950 sm:flex-none"
                 >
-                  {deletingId === t.id ? 'Deleting…' : 'Delete'}
+                  {deletingId === t.id ? '…' : <>🗑️ <span className="hidden sm:inline">Delete</span></>}
                 </button>
               </div>
             </li>
@@ -165,6 +161,15 @@ export default function AdminTournamentList({
             onChanged()
           }}
           onCancel={() => setCloning(null)}
+        />
+      )}
+      {pendingDelete && (
+        <ConfirmDialog
+          title={`Delete "${pendingDelete.name}"?`}
+          message={`This will permanently delete the tournament and ALL its age groups, teams and matches.`}
+          confirmLabel="Delete tournament"
+          onConfirm={() => confirmDelete(pendingDelete)}
+          onCancel={() => setPendingDelete(null)}
         />
       )}
     </div>
