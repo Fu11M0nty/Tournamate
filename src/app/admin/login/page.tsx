@@ -194,12 +194,14 @@ export default function AdminLoginPage() {
         </form>
 
         <p className="mt-5 border-t border-zinc-100 pt-4 text-center text-sm text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
-          New organiser?{' '}
+          Want to use TournaMate?{' '}
           <Link
-            href="/admin/signup"
+            href="/register-interest"
+            target="_blank"
+            rel="noopener noreferrer"
             className="font-medium text-mk-red hover:underline"
           >
-            Create an account
+            Register your interest
           </Link>
         </p>
       </div>
