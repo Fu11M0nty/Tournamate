@@ -223,6 +223,56 @@ create policy "tournaments_auth_delete"
   on public.tournaments for delete to authenticated
   using (created_by = auth.uid() or public.get_my_role() = 'superadmin');
 
+-- ── competition_dates ────────────────────────────────────────────────────────
+-- Guarded so this consolidated RBAC script remains re-runnable on databases
+-- that have not applied add_competition_dates.sql yet.
+do $$
+begin
+  if to_regclass('public.competition_dates') is not null then
+    execute 'drop policy if exists "competition_dates_public_select" on public.competition_dates';
+    execute 'drop policy if exists "competition_dates_anon_select" on public.competition_dates';
+    execute 'drop policy if exists "competition_dates_auth_select" on public.competition_dates';
+    execute 'drop policy if exists "competition_dates_auth_insert" on public.competition_dates';
+    execute 'drop policy if exists "competition_dates_auth_update" on public.competition_dates';
+    execute 'drop policy if exists "competition_dates_auth_delete" on public.competition_dates';
+
+    execute 'create policy "competition_dates_anon_select"
+      on public.competition_dates for select to anon using (true)';
+
+    execute 'create policy "competition_dates_auth_select"
+      on public.competition_dates for select to authenticated
+      using (tournament_id in (
+        select id from public.tournaments
+        where created_by = auth.uid() or public.get_my_role() = ''superadmin''
+      ))';
+
+    execute 'create policy "competition_dates_auth_insert"
+      on public.competition_dates for insert to authenticated
+      with check (tournament_id in (
+        select id from public.tournaments
+        where created_by = auth.uid() or public.get_my_role() = ''superadmin''
+      ))';
+
+    execute 'create policy "competition_dates_auth_update"
+      on public.competition_dates for update to authenticated
+      using (tournament_id in (
+        select id from public.tournaments
+        where created_by = auth.uid() or public.get_my_role() = ''superadmin''
+      ))
+      with check (tournament_id in (
+        select id from public.tournaments
+        where created_by = auth.uid() or public.get_my_role() = ''superadmin''
+      ))';
+
+    execute 'create policy "competition_dates_auth_delete"
+      on public.competition_dates for delete to authenticated
+      using (tournament_id in (
+        select id from public.tournaments
+        where created_by = auth.uid() or public.get_my_role() = ''superadmin''
+      ))';
+  end if;
+end $$;
+
 -- ── age_groups ────────────────────────────────────────────────────────────────
 
 drop policy if exists "age_groups_auth_select" on public.age_groups;
@@ -263,6 +313,193 @@ create policy "age_groups_auth_delete"
   ));
 
 -- ── courts ────────────────────────────────────────────────────────────────────
+
+-- Guarded so this consolidated RBAC script remains re-runnable on databases
+-- that have not applied add_phases.sql yet.
+do $$
+begin
+  if to_regclass('public.phases') is not null then
+    execute 'drop policy if exists "phases_public_select" on public.phases';
+    execute 'drop policy if exists "phases_anon_select" on public.phases';
+    execute 'drop policy if exists "phases_auth_select" on public.phases';
+    execute 'drop policy if exists "phases_auth_insert" on public.phases';
+    execute 'drop policy if exists "phases_auth_update" on public.phases';
+    execute 'drop policy if exists "phases_auth_delete" on public.phases';
+
+    execute 'create policy "phases_anon_select"
+      on public.phases for select to anon using (true)';
+
+    execute 'create policy "phases_auth_select"
+      on public.phases for select to authenticated
+      using (age_group_id in (
+        select ag.id
+        from public.age_groups ag
+        join public.tournaments t on t.id = ag.tournament_id
+        where t.created_by = auth.uid() or public.get_my_role() = ''superadmin''
+      ))';
+
+    execute 'create policy "phases_auth_insert"
+      on public.phases for insert to authenticated
+      with check (age_group_id in (
+        select ag.id
+        from public.age_groups ag
+        join public.tournaments t on t.id = ag.tournament_id
+        where t.created_by = auth.uid() or public.get_my_role() = ''superadmin''
+      ))';
+
+    execute 'create policy "phases_auth_update"
+      on public.phases for update to authenticated
+      using (age_group_id in (
+        select ag.id
+        from public.age_groups ag
+        join public.tournaments t on t.id = ag.tournament_id
+        where t.created_by = auth.uid() or public.get_my_role() = ''superadmin''
+      ))
+      with check (age_group_id in (
+        select ag.id
+        from public.age_groups ag
+        join public.tournaments t on t.id = ag.tournament_id
+        where t.created_by = auth.uid() or public.get_my_role() = ''superadmin''
+      ))';
+
+    execute 'create policy "phases_auth_delete"
+      on public.phases for delete to authenticated
+      using (age_group_id in (
+        select ag.id
+        from public.age_groups ag
+        join public.tournaments t on t.id = ag.tournament_id
+        where t.created_by = auth.uid() or public.get_my_role() = ''superadmin''
+      ))';
+  end if;
+end $$;
+
+-- Guarded so this consolidated RBAC script remains re-runnable on databases
+-- that have not applied add_pools.sql yet.
+do $$
+begin
+  if to_regclass('public.pools') is not null then
+    execute 'drop policy if exists "pools_public_select" on public.pools';
+    execute 'drop policy if exists "pools_anon_select" on public.pools';
+    execute 'drop policy if exists "pools_auth_select" on public.pools';
+    execute 'drop policy if exists "pools_auth_insert" on public.pools';
+    execute 'drop policy if exists "pools_auth_update" on public.pools';
+    execute 'drop policy if exists "pools_auth_delete" on public.pools';
+
+    execute 'create policy "pools_anon_select"
+      on public.pools for select to anon using (true)';
+
+    execute 'create policy "pools_auth_select"
+      on public.pools for select to authenticated
+      using (phase_id in (
+        select ph.id
+        from public.phases ph
+        join public.age_groups ag on ag.id = ph.age_group_id
+        join public.tournaments t on t.id = ag.tournament_id
+        where t.created_by = auth.uid() or public.get_my_role() = ''superadmin''
+      ))';
+
+    execute 'create policy "pools_auth_insert"
+      on public.pools for insert to authenticated
+      with check (phase_id in (
+        select ph.id
+        from public.phases ph
+        join public.age_groups ag on ag.id = ph.age_group_id
+        join public.tournaments t on t.id = ag.tournament_id
+        where t.created_by = auth.uid() or public.get_my_role() = ''superadmin''
+      ))';
+
+    execute 'create policy "pools_auth_update"
+      on public.pools for update to authenticated
+      using (phase_id in (
+        select ph.id
+        from public.phases ph
+        join public.age_groups ag on ag.id = ph.age_group_id
+        join public.tournaments t on t.id = ag.tournament_id
+        where t.created_by = auth.uid() or public.get_my_role() = ''superadmin''
+      ))
+      with check (phase_id in (
+        select ph.id
+        from public.phases ph
+        join public.age_groups ag on ag.id = ph.age_group_id
+        join public.tournaments t on t.id = ag.tournament_id
+        where t.created_by = auth.uid() or public.get_my_role() = ''superadmin''
+      ))';
+
+    execute 'create policy "pools_auth_delete"
+      on public.pools for delete to authenticated
+      using (phase_id in (
+        select ph.id
+        from public.phases ph
+        join public.age_groups ag on ag.id = ph.age_group_id
+        join public.tournaments t on t.id = ag.tournament_id
+        where t.created_by = auth.uid() or public.get_my_role() = ''superadmin''
+      ))';
+  end if;
+
+  if to_regclass('public.pool_teams') is not null then
+    execute 'drop policy if exists "pool_teams_public_select" on public.pool_teams';
+    execute 'drop policy if exists "pool_teams_anon_select" on public.pool_teams';
+    execute 'drop policy if exists "pool_teams_auth_select" on public.pool_teams';
+    execute 'drop policy if exists "pool_teams_auth_insert" on public.pool_teams';
+    execute 'drop policy if exists "pool_teams_auth_update" on public.pool_teams';
+    execute 'drop policy if exists "pool_teams_auth_delete" on public.pool_teams';
+
+    execute 'create policy "pool_teams_anon_select"
+      on public.pool_teams for select to anon using (true)';
+
+    execute 'create policy "pool_teams_auth_select"
+      on public.pool_teams for select to authenticated
+      using (pool_id in (
+        select p.id
+        from public.pools p
+        join public.phases ph on ph.id = p.phase_id
+        join public.age_groups ag on ag.id = ph.age_group_id
+        join public.tournaments t on t.id = ag.tournament_id
+        where t.created_by = auth.uid() or public.get_my_role() = ''superadmin''
+      ))';
+
+    execute 'create policy "pool_teams_auth_insert"
+      on public.pool_teams for insert to authenticated
+      with check (pool_id in (
+        select p.id
+        from public.pools p
+        join public.phases ph on ph.id = p.phase_id
+        join public.age_groups ag on ag.id = ph.age_group_id
+        join public.tournaments t on t.id = ag.tournament_id
+        where t.created_by = auth.uid() or public.get_my_role() = ''superadmin''
+      ))';
+
+    execute 'create policy "pool_teams_auth_update"
+      on public.pool_teams for update to authenticated
+      using (pool_id in (
+        select p.id
+        from public.pools p
+        join public.phases ph on ph.id = p.phase_id
+        join public.age_groups ag on ag.id = ph.age_group_id
+        join public.tournaments t on t.id = ag.tournament_id
+        where t.created_by = auth.uid() or public.get_my_role() = ''superadmin''
+      ))
+      with check (pool_id in (
+        select p.id
+        from public.pools p
+        join public.phases ph on ph.id = p.phase_id
+        join public.age_groups ag on ag.id = ph.age_group_id
+        join public.tournaments t on t.id = ag.tournament_id
+        where t.created_by = auth.uid() or public.get_my_role() = ''superadmin''
+      ))';
+
+    execute 'create policy "pool_teams_auth_delete"
+      on public.pool_teams for delete to authenticated
+      using (pool_id in (
+        select p.id
+        from public.pools p
+        join public.phases ph on ph.id = p.phase_id
+        join public.age_groups ag on ag.id = ph.age_group_id
+        join public.tournaments t on t.id = ag.tournament_id
+        where t.created_by = auth.uid() or public.get_my_role() = ''superadmin''
+      ))';
+  end if;
+end $$;
 
 drop policy if exists "courts_auth_select" on public.courts;
 drop policy if exists "courts_auth_insert" on public.courts;

@@ -1,56 +1,59 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { createClient } from '@/lib/supabase'
 import { slugify } from '@/lib/slugify'
 import { totalMatchMinutes } from '@/lib/matchRules'
 import { applyMatchRulesToGroup } from '@/lib/matches'
-import type { AgeGroup, Day, MatchFormat } from '@/lib/types'
+import { labelForLegacyDay, legacyDaysForTournament } from '@/lib/competitionDates'
+import type { Division, Day, MatchFormat, Tournament } from '@/lib/types'
 
-interface AgeGroupEditFormProps {
+interface DivisionEditFormProps {
   mode: 'create' | 'edit'
   tournamentId: string
-  ageGroup?: AgeGroup
+  tournament: Tournament
+  division?: Division
   defaultDisplayOrder?: number
   onSaved: () => void
   onCancel: () => void
 }
 
-const DAYS: Day[] = ['saturday', 'sunday']
-
-export default function AgeGroupEditForm({
+export default function DivisionEditForm({
   mode,
   tournamentId,
-  ageGroup,
+  tournament,
+  division,
   defaultDisplayOrder,
   onSaved,
   onCancel,
-}: AgeGroupEditFormProps) {
-  const [name, setName] = useState(ageGroup?.name ?? '')
-  const [slug, setSlug] = useState(ageGroup?.slug ?? '')
+}: DivisionEditFormProps) {
+  const [name, setName] = useState(division?.name ?? '')
+  const [slug, setSlug] = useState(division?.slug ?? '')
   const [slugTouched, setSlugTouched] = useState(mode === 'edit')
-  const [day, setDay] = useState<Day>(ageGroup?.day ?? 'saturday')
+  const [day, setDay] = useState<Day>(division?.day ?? 'saturday')
   const [displayOrder, setDisplayOrder] = useState<string>(
-    String(ageGroup?.display_order ?? defaultDisplayOrder ?? 1)
+    String(division?.display_order ?? defaultDisplayOrder ?? 1)
   )
-  const [gender, setGender] = useState(ageGroup?.gender ?? '')
-  const [skillLevel, setSkillLevel] = useState(ageGroup?.skill_level ?? '')
+  const [gender, setGender] = useState(division?.gender ?? '')
+  const [skillLevel, setSkillLevel] = useState(division?.skill_level ?? '')
   const [matchFormat, setMatchFormat] = useState<MatchFormat>(
-    ageGroup?.match_format ?? 'continuous'
+    division?.match_format ?? 'continuous'
   )
   const [periodMinutes, setPeriodMinutes] = useState<string>(
-    String(ageGroup?.period_minutes ?? 12)
+    String(division?.period_minutes ?? 12)
   )
   const [breakQ1Q2, setBreakQ1Q2] = useState<string>(
-    String(ageGroup?.break_q1_q2_minutes ?? 0)
+    String(division?.break_q1_q2_minutes ?? 0)
   )
   const [breakHalfTime, setBreakHalfTime] = useState<string>(
-    String(ageGroup?.break_half_time_minutes ?? 0)
+    String(division?.break_half_time_minutes ?? 0)
   )
   const [breakQ3Q4, setBreakQ3Q4] = useState<string>(
-    String(ageGroup?.break_q3_q4_minutes ?? 0)
+    String(division?.break_q3_q4_minutes ?? 0)
   )
+  const [scoringSystemId, setScoringSystemId] = useState<string>(division?.scoring_system_id ?? '')
+  const [scoringSystems, setScoringSystems] = useState<{ id: string; name: string }[]>([])
   const [saving, setSaving] = useState(false)
 
   const parsedPeriod = Math.max(1, Math.floor(Number(periodMinutes) || 0))
@@ -66,7 +69,26 @@ export default function AgeGroupEditForm({
     break_q3_q4_minutes: parsedBreakQ3Q4,
   })
 
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
+  const dayOptions = Array.from(
+    new Set([...legacyDaysForTournament(tournament), division?.day].filter(Boolean))
+  ) as Day[]
+
+  useEffect(() => {
+    async function loadScoringSystems() {
+      const { data } = await supabase.from('scoring_systems').select('id, name').order('name')
+      if (data) {
+        setScoringSystems(data)
+        setScoringSystemId((current) => {
+          if (mode === 'create' && !current) {
+            return tournament.default_scoring_system_id ?? data[0]?.id ?? ''
+          }
+          return current
+        })
+      }
+    }
+    loadScoringSystems()
+  }, [mode, supabase, tournament.default_scoring_system_id])
 
   function handleNameChange(value: string) {
     setName(value)
@@ -108,6 +130,7 @@ export default function AgeGroupEditForm({
         matchFormat === 'continuous' ? 0 : parsedBreakHalf,
       break_q3_q4_minutes:
         matchFormat === 'quarters' ? parsedBreakQ3Q4 : 0,
+      scoring_system_id: scoringSystemId || null,
     }
 
     setSaving(true)
@@ -117,7 +140,7 @@ export default function AgeGroupEditForm({
         : await supabase
             .from('age_groups')
             .update(payload)
-            .eq('id', ageGroup!.id)
+            .eq('id', division!.id)
             .select()
     setSaving(false)
 
@@ -136,18 +159,18 @@ export default function AgeGroupEditForm({
 
     // Push the new total duration to every existing match in this group so the
     // scheduler block sizes stay aligned with the age-group rules.
-    const savedId = (data[0] as AgeGroup).id
+    const savedId = (data[0] as Division).id
     const result = await applyMatchRulesToGroup(supabase, savedId, totalMinutes)
     if (result.error) {
       toast.error(`Saved, but rules not pushed to matches: ${result.error}`)
     } else if (result.updated > 0) {
       toast.success(
-        `Age group saved · ${result.updated} match${
+        `Division saved · ${result.updated} match${
           result.updated === 1 ? '' : 'es'
         } updated to ${totalMinutes} min`
       )
     } else {
-      toast.success(mode === 'create' ? 'Age group created' : 'Age group saved')
+      toast.success(mode === 'create' ? 'Division created' : 'Division saved')
     }
     onSaved()
   }
@@ -168,7 +191,7 @@ export default function AgeGroupEditForm({
             id="age-group-edit-title"
             className="text-base font-bold text-zinc-900 dark:text-zinc-50"
           >
-            {mode === 'create' ? 'New age group' : 'Edit age group'}
+            {mode === 'create' ? 'New division' : 'Edit division'}
           </h2>
         </header>
 
@@ -226,9 +249,9 @@ export default function AgeGroupEditForm({
                 onChange={(e) => setDay(e.target.value as Day)}
                 className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-mk-red focus:outline-none focus:ring-1 focus:ring-mk-red dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
               >
-                {DAYS.map((d) => (
+                {dayOptions.map((d) => (
                   <option key={d} value={d}>
-                    {d === 'saturday' ? 'Saturday' : 'Sunday'}
+                    {labelForLegacyDay(tournament, d)}
                   </option>
                 ))}
               </select>
@@ -413,6 +436,24 @@ export default function AgeGroupEditForm({
             </p>
           </div>
 
+          <div className="space-y-3 rounded-md border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900/40">
+            <div className="flex items-baseline justify-between gap-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                Scoring system
+              </p>
+            </div>
+            <select
+              value={scoringSystemId}
+              onChange={(e) => setScoringSystemId(e.target.value)}
+              className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-mk-red focus:outline-none focus:ring-1 focus:ring-mk-red dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+            >
+              <option value="">— Select a scoring system —</option>
+              {scoringSystems.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+
           <div className="flex gap-2 pt-2">
             <button
               type="button"
@@ -435,3 +476,5 @@ export default function AgeGroupEditForm({
     </div>
   )
 }
+
+

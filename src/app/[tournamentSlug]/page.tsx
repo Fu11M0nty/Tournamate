@@ -1,5 +1,10 @@
 import { createPublicSupabaseClient } from '@/lib/supabase'
 import { calculateStandings } from '@/lib/standings'
+import {
+  effectiveScoringSystemForAgeGroup,
+  matchesForPhaseScope,
+} from '@/lib/scoring'
+import { labelForLegacyDay } from '@/lib/competitionDates'
 import MiniStandings from '@/components/MiniStandings'
 import NotFoundMessage from '@/components/NotFoundMessage'
 import type { AgeGroup, Day, Match, Team, Tournament } from '@/lib/types'
@@ -22,23 +27,6 @@ function formatDateRange(start: string | null, end: string | null): string {
     new Intl.DateTimeFormat('en-GB', opts).format(new Date(iso))
   if (!end || end === start) return fmt(start)
   return `${fmt(start)} – ${fmt(end)}`
-}
-
-function dayBannerLabel(
-  day: Day,
-  startISO: string | null,
-  endISO: string | null
-): string {
-  const dayName = day === 'saturday' ? 'Saturday' : 'Sunday'
-  const target = day === 'saturday' ? startISO : endISO || startISO
-  if (!target) return dayName
-  const dateLabel = new Intl.DateTimeFormat('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    timeZone: 'Europe/London',
-  }).format(new Date(target))
-  return `${dayName} · ${dateLabel}`
 }
 
 export default async function TournamentLandingPage({ params }: Props) {
@@ -64,7 +52,7 @@ export default async function TournamentLandingPage({ params }: Props) {
   const [groupsRes, teamsRes, matchesRes] = await Promise.all([
     supabase
       .from('age_groups')
-      .select('*')
+      .select('*, scoring_system:scoring_systems(*), phases(*, scoring_system:scoring_systems(*))')
       .eq('tournament_id', tournament.id)
       .order('display_order', { ascending: true }),
     supabase.from('teams').select('*').is('deleted_at', null),
@@ -130,7 +118,7 @@ export default async function TournamentLandingPage({ params }: Props) {
             {formatDateRange(tournament.start_date, tournament.end_date)}
             {formatDateRange(tournament.start_date, tournament.end_date) &&
               ' · '}
-            Live standings across every age group. Tap any group to open its
+            Live standings across every division. Tap any group to open its
             full table, results and fixtures.
           </p>
           <div className="mt-5 flex flex-wrap gap-2 text-xs font-semibold">
@@ -176,11 +164,7 @@ export default async function TournamentLandingPage({ params }: Props) {
                 id={`${d}-heading`}
                 className="text-xs font-extrabold uppercase tracking-[0.25em] text-tm-orange"
               >
-                {dayBannerLabel(
-                  d,
-                  tournament.start_date,
-                  tournament.end_date
-                )}
+                {labelForLegacyDay(tournament, d)}
               </h2>
               <span className="h-px flex-1 bg-tm-orange/30" />
             </header>
@@ -188,14 +172,16 @@ export default async function TournamentLandingPage({ params }: Props) {
               {groupsForDay.map((g) => {
                 const groupTeams = teamsByGroup.get(g.id) ?? []
                 const groupMatches = matchesByGroup.get(g.id) ?? []
-                const standings = calculateStandings(groupTeams, groupMatches)
+                const standingsMatches = matchesForPhaseScope(g, groupMatches)
+                const sys = effectiveScoringSystemForAgeGroup(g)
+                const standings = calculateStandings(groupTeams, standingsMatches, sys)
                 return (
                   <MiniStandings
                     key={g.id}
                     tournamentSlug={tournament.slug}
                     group={g}
                     standings={standings}
-                    matches={groupMatches}
+                    matches={standingsMatches}
                   />
                 )
               })}
@@ -206,3 +192,4 @@ export default async function TournamentLandingPage({ params }: Props) {
     </main>
   )
 }
+

@@ -93,7 +93,7 @@ export default async function ScorecardsPage({ params, searchParams }: Props) {
     return (
       <main className="flex min-h-screen items-center justify-center p-8 font-sans">
         <div className="text-center">
-          <p className="mb-4 text-zinc-600">No age groups found for {day}.</p>
+          <p className="mb-4 text-zinc-600">No divisions found for {day}.</p>
           <a href="/admin" className="font-semibold text-mk-red hover:underline">
             ← Back to admin
           </a>
@@ -242,13 +242,13 @@ export default async function ScorecardsPage({ params, searchParams }: Props) {
               >
                 <thead>
                   <tr>
-                    {['Age Group', 'Matches', 'Courts', 'Start', 'Est. Finish'].map(
+                    {['Division', 'Matches', 'Courts', 'Start', 'Est. Finish'].map(
                       (h) => (
                         <th
                           key={h}
                           style={{
                             padding: '4pt 6pt',
-                            textAlign: h === 'Age Group' ? 'left' : 'center',
+                            textAlign: h === 'Division' ? 'left' : 'center',
                             borderBottom: '1pt solid #000',
                             backgroundColor: '#f3f4f6',
                             fontWeight: 700,
@@ -390,8 +390,8 @@ export default async function ScorecardsPage({ params, searchParams }: Props) {
               <div className="scorecard-page">
                 {pageMatches.map((match) => {
                   const ag = ageGroupMap[match.age_group_id]
-                  const home = teamMap[match.home_team_id]
-                  const away = teamMap[match.away_team_id]
+                  const home = match.home_team_id ? teamMap[match.home_team_id] : null
+                  const away = match.away_team_id ? teamMap[match.away_team_id] : null
                   if (!ag || !home || !away) return null
                   const shortId = match.id.replace(/-/g, '').slice(0, 8).toUpperCase()
                   const captureUrl = `${baseUrl}/admin/c/${shortId}`

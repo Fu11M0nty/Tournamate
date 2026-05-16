@@ -41,3 +41,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+#Help Pages
+/data/tournament_structures.pdf
+/data/Help Pages/
+/data/Help Pages/*
+

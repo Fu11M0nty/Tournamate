@@ -5,7 +5,6 @@ import toast from 'react-hot-toast'
 import TeamEditForm from './TeamEditForm'
 import TeamLogoDropzone from './TeamLogoDropzone'
 import TeamPlayersDialog from './TeamPlayersDialog'
-import ConfirmDialog from './ConfirmDialog'
 import { createClient } from '@/lib/supabase'
 import { restoreTeam, softDeleteTeam } from '@/lib/matches'
 import type { Team } from '@/lib/types'
@@ -32,6 +31,9 @@ export default function AdminTeamList({
   const [loadingDeleted, setLoadingDeleted] = useState(false)
   const [showActionsMenu, setShowActionsMenu] = useState(false)
   const [pendingDelete, setPendingDelete] = useState<Team | null>(null)
+  const [deleteMatchCounts, setDeleteMatchCounts] = useState<{ scheduled: number; completed: number } | null>(null)
+  const [loadingDeleteCounts, setLoadingDeleteCounts] = useState(false)
+  const [typeConfirm, setTypeConfirm] = useState('')
   const supabase = createClient()
 
   const loadDeleted = useCallback(async () => {
@@ -54,8 +56,32 @@ export default function AdminTeamList({
     if (showDeleted) loadDeleted()
   }, [showDeleted, loadDeleted])
 
-  async function confirmDelete(team: Team) {
+  async function handleDeleteClick(team: Team) {
+    setPendingDelete(team)
+    setDeleteMatchCounts(null)
+    setTypeConfirm('')
+    setLoadingDeleteCounts(true)
+    const { data } = await supabase
+      .from('matches')
+      .select('id, status')
+      .or(`home_team_id.eq.${team.id},away_team_id.eq.${team.id}`)
+      .is('deleted_at', null)
+    const rows = (data ?? []) as { status: string }[]
+    setDeleteMatchCounts({
+      scheduled: rows.filter((m) => m.status === 'scheduled').length,
+      completed: rows.filter((m) => m.status === 'completed').length,
+    })
+    setLoadingDeleteCounts(false)
+  }
+
+  function closeDeleteModal() {
     setPendingDelete(null)
+    setDeleteMatchCounts(null)
+    setTypeConfirm('')
+  }
+
+  async function confirmDelete(team: Team) {
+    closeDeleteModal()
     setBusyId(team.id)
     const r = await softDeleteTeam(supabase, team.id)
     setBusyId(null)
@@ -151,7 +177,7 @@ export default function AdminTeamList({
       </div>
       {sorted.length === 0 ? (
         <p className="rounded-lg border border-dashed border-zinc-300 bg-white p-6 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-400">
-          No teams in this age group yet. Click&nbsp;
+          No teams in this division yet. Click&nbsp;
           <span className="font-semibold">Add team</span> to start building the
           roster.
         </p>
@@ -203,7 +229,7 @@ export default function AdminTeamList({
               </button>
               <button
                 type="button"
-                onClick={() => setPendingDelete(team)}
+                onClick={() => handleDeleteClick(team)}
                 disabled={busyId === team.id}
                 className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 shadow-sm transition-colors hover:bg-red-50 disabled:opacity-60 dark:border-red-900 dark:bg-zinc-900 dark:text-red-400 dark:hover:bg-red-950 sm:flex-none"
               >
@@ -304,14 +330,94 @@ export default function AdminTeamList({
         />
       )}
       {pendingDelete && (
-        <ConfirmDialog
-          title={`Delete "${pendingDelete.name}"?`}
-          message={`Their fixtures will also be hidden from the schedule and standings. This is a soft delete and can be restored later.`}
-          confirmLabel="Delete team"
-          onConfirm={() => confirmDelete(pendingDelete)}
-          onCancel={() => setPendingDelete(null)}
-        />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.55)' }}>
+          <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-700 dark:bg-zinc-900">
+            <div className="mb-4 flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-100 dark:bg-red-950">
+                <svg className="h-5 w-5 text-red-600 dark:text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                  <line x1="12" y1="9" x2="12" y2="13" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+              </div>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-50">
+                  Delete &ldquo;{pendingDelete.name}&rdquo;?
+                </h2>
+                {loadingDeleteCounts ? (
+                  <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Checking fixtures…</p>
+                ) : deleteMatchCounts ? (
+                  <div className="mt-1 space-y-1 text-sm text-zinc-600 dark:text-zinc-400">
+                    {deleteMatchCounts.completed > 0 ? (
+                      <>
+                        <p>
+                          This team has{' '}
+                          <span className="font-semibold text-red-600 dark:text-red-400">
+                            {deleteMatchCounts.completed} completed result{deleteMatchCounts.completed !== 1 ? 's' : ''}
+                          </span>
+                          {deleteMatchCounts.scheduled > 0 && (
+                            <> and {deleteMatchCounts.scheduled} upcoming fixture{deleteMatchCounts.scheduled !== 1 ? 's' : ''}</>
+                          )}.
+                          Their results will be hidden from standings and the schedule.
+                        </p>
+                        <p className="text-xs">This is a soft delete — the team and all their results can be restored from the deleted teams panel.</p>
+                      </>
+                    ) : deleteMatchCounts.scheduled > 0 ? (
+                      <>
+                        <p>
+                          This team has{' '}
+                          <span className="font-semibold">{deleteMatchCounts.scheduled} upcoming fixture{deleteMatchCounts.scheduled !== 1 ? 's' : ''}</span>{' '}
+                          that will be hidden from the schedule.
+                        </p>
+                        <p className="text-xs">This is a soft delete — the team and their fixtures can be restored later.</p>
+                      </>
+                    ) : (
+                      <p>This is a soft delete — the team can be restored from the deleted teams panel.</p>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            {!loadingDeleteCounts && (deleteMatchCounts?.completed ?? 0) > 0 && (
+              <div className="mb-4">
+                <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                  Type <span className="font-mono">{pendingDelete.name}</span> to confirm
+                </label>
+                <input
+                  type="text"
+                  value={typeConfirm}
+                  onChange={(e) => setTypeConfirm(e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                  placeholder={pendingDelete.name}
+                />
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={closeDeleteModal}
+                className="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={
+                  loadingDeleteCounts ||
+                  ((deleteMatchCounts?.completed ?? 0) > 0 && typeConfirm !== pendingDelete.name)
+                }
+                onClick={() => confirmDelete(pendingDelete)}
+                className="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-red-700 dark:hover:bg-red-600"
+              >
+                Delete team
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   )
 }
+

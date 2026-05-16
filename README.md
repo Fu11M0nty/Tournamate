@@ -31,17 +31,20 @@ Both are safe to ship to the browser — Row Level Security enforces access cont
 
 ## Supabase setup
 
-1. Create a new project at [supabase.com](https://supabase.com).
-2. Open **SQL Editor** and run [`supabase/schema.sql`](./supabase/schema.sql) — creates the `age_groups`, `teams`, `matches` tables, enables RLS, and installs the public-read / authenticated-write policies.
-3. In the same editor, run [`supabase/seed.sql`](./supabase/seed.sql) to populate Saturday/Sunday age groups, teams and a realistic mix of completed and scheduled matches.
-4. In **Storage**, create a **public** bucket named `team-logos` (the admin team-edit form uploads logos to this bucket).
-5. In **Project settings → API**, copy the project URL and the `anon` public key into your `.env.local`.
+Use [`supabase/README.md`](./supabase/README.md) as the source of truth for database setup.
+
+It contains two separate paths:
+
+1. A fresh-build path for new development, staging, or pre-production Supabase projects.
+2. An existing-database upgrade path for production-safe migrations.
+
+Do not run [`supabase/schema.sql`](./supabase/schema.sql) against production. It drops and recreates core tables.
 
 ### Create the admin user
 
 1. In the Supabase dashboard, go to **Authentication → Users → Add user → Create new user**.
 2. Enter the organiser's email and a password, and tick **Auto Confirm User** so they can sign in immediately (no email verification step).
-3. That's it — any confirmed user in the project can sign into `/admin/login`. There is no self-signup route, so creating users through the dashboard is how admin access is granted.
+3. Promote the user to `superadmin` using the SQL in [`supabase/README.md`](./supabase/README.md). There is no self-signup route, so creating users through the dashboard is how admin access is granted.
 
 ---
 
@@ -66,8 +69,8 @@ src/
 ├── app/
 │   ├── page.tsx                              # redirects to /saturday
 │   ├── [day]/
-│   │   ├── page.tsx                          # picks first age group for the day
-│   │   └── [ageGroupSlug]/page.tsx           # public standings + results + fixtures
+│   │   ├── page.tsx                          # picks first division for the day
+│   │   └── [divisionSlug]/page.tsx           # public standings + results + fixtures
 │   ├── admin/
 │   │   ├── page.tsx                          # admin dashboard (Matches / Teams tabs)
 │   │   └── login/page.tsx                    # Supabase email/password sign-in
@@ -79,8 +82,9 @@ src/
 │   ├── slugify.ts
 │   └── types.ts
 supabase/
-├── schema.sql                                # run first
-└── seed.sql                                  # run second
+├── README.md                                 # fresh-build and upgrade runbook
+├── schema.sql                                # destructive fresh-build baseline
+└── *.sql                                     # additive migrations, RPCs, policies, seed data
 middleware.ts                                 # gates /admin routes behind Supabase Auth
 ```
 

@@ -27,8 +27,22 @@ import {
   type AutoPlanLock,
   type AutoPlanMatch,
 } from '@/lib/autoPlan'
-import type { AgeGroup, Court, Day, Match, Team, Tournament } from '@/lib/types'
+import type {
+  AgeGroup,
+  Court,
+  Day,
+  ElementSlot,
+  Match,
+  Phase,
+  PhaseElement,
+  Pool,
+  ProgressionRule,
+  Team,
+  Tournament,
+} from '@/lib/types'
+import { labelForLegacyDay, legacyDaysForTournament } from '@/lib/competitionDates'
 import type { ScheduleImportRow } from '@/lib/scheduleExcel'
+import { matchStageRoundLabel } from '@/lib/matchLabel'
 
 const DEFAULT_DAY_START_MIN = 8 * 60 // 08:00
 const DEFAULT_DAY_END_MIN = 17 * 60 // 17:00
@@ -46,7 +60,6 @@ interface ColorTheme {
   textDark: string
   dot: string
 }
-
 const AGE_GROUP_PALETTE: ColorTheme[] = [
   {
     bg: 'bg-sky-100',
@@ -136,10 +149,6 @@ function minutesFromIso(iso: string): number {
   return hhmmToMinutes(getLondonTimeHHmm(iso))
 }
 
-function hhmmFromSlotIndex(idx: number, gridStartMin: number): string {
-  return minutesToHHMM(gridStartMin + idx * SLOT_MINUTES)
-}
-
 function dateForDay(t: Tournament, day: Day): string | null {
   if (day === 'saturday') return t.start_date
   return t.end_date ?? t.start_date
@@ -156,8 +165,31 @@ interface MatchWithMeta extends Match {
   homeName: string
   awayName: string
   groupName: string
+  stageLabel: string | null
   groupDay: Day
   groupColor: ColorTheme
+}
+
+interface SchedulingGuard {
+  blocked: boolean
+  dependent: boolean
+  reason: string | null
+  notBeforeIso: string | null
+  notBeforeMin: number | null
+}
+
+function ordinal(n: number): string {
+  const suffix =
+    n % 100 >= 11 && n % 100 <= 13
+      ? 'th'
+      : n % 10 === 1
+        ? 'st'
+        : n % 10 === 2
+          ? 'nd'
+          : n % 10 === 3
+            ? 'rd'
+            : 'th'
+  return `${n}${suffix}`
 }
 
 interface LaneAssignment {
@@ -231,8 +263,14 @@ export default function AdminScheduleView({
 }: AdminScheduleViewProps) {
   const supabase = createClient()
   const [day, setDay] = useState<Day>('saturday')
+  const dayOptions = legacyDaysForTournament(tournament)
   const [matches, setMatches] = useState<Match[]>([])
   const [teams, setTeams] = useState<Team[]>([])
+  const [phases, setPhases] = useState<Phase[]>([])
+  const [phaseElements, setPhaseElements] = useState<PhaseElement[]>([])
+  const [pools, setPools] = useState<Pool[]>([])
+  const [elementSlots, setElementSlots] = useState<ElementSlot[]>([])
+  const [progressionRules, setProgressionRules] = useState<ProgressionRule[]>([])
   const [courts, setCourts] = useState<Court[]>([])
   const [loading, setLoading] = useState(true)
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -331,7 +369,7 @@ export default function AdminScheduleView({
 
   const ageGroupIds = useMemo(() => ageGroups.map((g) => g.id), [ageGroups])
 
-  // Stable color map keyed by age group id.
+  // Stable color map keyed by division id.
   const groupColorMap = useMemo(() => {
     const map = new Map<string, ColorTheme>()
     const sorted = [...ageGroups].sort(
@@ -358,15 +396,136 @@ export default function AdminScheduleView({
     return m
   }, [teams])
 
+  const phaseById = useMemo(() => {
+    const m = new Map<string, Phase>()
+    for (const phase of phases) m.set(phase.id, phase)
+    return m
+  }, [phases])
+
+  const elementById = useMemo(() => {
+    const m = new Map<string, PhaseElement>()
+    for (const element of phaseElements) m.set(element.id, element)
+    return m
+  }, [phaseElements])
+
+  const poolById = useMemo(() => {
+    const m = new Map<string, Pool>()
+    for (const pool of pools) m.set(pool.id, pool)
+    return m
+  }, [pools])
+
+  const slotById = useMemo(() => {
+    const m = new Map<string, ElementSlot>()
+    for (const slot of elementSlots) m.set(slot.id, slot)
+    return m
+  }, [elementSlots])
+
+  const rulesByTargetSlot = useMemo(() => {
+    const byId = new Map<string, ProgressionRule>()
+    const byElementOrder = new Map<string, ProgressionRule>()
+    for (const rule of progressionRules) {
+      if (rule.to_slot_id) byId.set(rule.to_slot_id, rule)
+      if (rule.to_slot_order) {
+        byElementOrder.set(`${rule.to_element_id}:${rule.to_slot_order}`, rule)
+      }
+    }
+    return { byId, byElementOrder }
+  }, [progressionRules])
+
+  const fixtureSourceLabel = useCallback(
+    (match: Match | undefined | null) => {
+      if (!match) return 'previous fixture'
+      const element = match.phase_element_id ? elementById.get(match.phase_element_id) : null
+      const phase = match.phase_id ? phaseById.get(match.phase_id) : null
+      return element?.name ?? phase?.name ?? 'previous fixture'
+    },
+    [elementById, phaseById]
+  )
+
+  const slotSourceLabel = useCallback(
+    (slotId: string | null): string => {
+      if (!slotId) return 'TBD'
+      const slot = slotById.get(slotId)
+      if (!slot) return 'TBD'
+
+      if (slot.team_id) {
+        return teamById.get(slot.team_id)?.name ?? slot.label ?? 'TBD'
+      }
+
+      const rule =
+        rulesByTargetSlot.byId.get(slot.id) ??
+        rulesByTargetSlot.byElementOrder.get(
+          `${slot.phase_element_id}:${slot.display_order}`
+        )
+
+      const sourceMatch = slot.source_match_id
+        ? matches.find((candidate) => candidate.id === slot.source_match_id)
+        : rule?.from_match_id
+          ? matches.find((candidate) => candidate.id === rule.from_match_id)
+          : null
+      const sourceElement =
+        (slot.source_element_id ? elementById.get(slot.source_element_id) : null) ??
+        (rule?.from_element_id ? elementById.get(rule.from_element_id) : null)
+      const sourcePhase =
+        (slot.source_phase_id ? phaseById.get(slot.source_phase_id) : null) ??
+        (rule?.from_phase_id ? phaseById.get(rule.from_phase_id) : null)
+      const sourceName =
+        sourceMatch ? fixtureSourceLabel(sourceMatch) : sourceElement?.name ?? sourcePhase?.name
+
+      const outcome = slot.source_outcome ?? (
+        rule?.source_type === 'match_winner'
+          ? 'winner'
+          : rule?.source_type === 'match_loser'
+            ? 'loser'
+            : rule?.source_type === 'standings_rank'
+              ? 'rank'
+              : rule?.source_type === 'best_rank'
+                ? 'best_rank'
+                : null
+      )
+
+      if (outcome === 'winner') return `Winner of ${sourceName ?? 'previous fixture'}`
+      if (outcome === 'loser') return `Loser of ${sourceName ?? 'previous fixture'}`
+      if (outcome === 'rank') {
+        const rank = slot.source_rank ?? rule?.source_rank
+        return rank
+          ? `${ordinal(rank)} from ${sourceName ?? 'previous standings'}`
+          : `Ranked team from ${sourceName ?? 'previous standings'}`
+      }
+      if (outcome === 'best_rank') {
+        const rank = slot.source_rank ?? rule?.source_rank
+        return rank
+          ? `Best ${ordinal(rank)} placed team`
+          : 'Best ranked qualifier'
+      }
+
+      return slot.label ?? 'TBD'
+    },
+    [
+      elementById,
+      fixtureSourceLabel,
+      matches,
+      phaseById,
+      rulesByTargetSlot,
+      slotById,
+      teamById,
+    ]
+  )
+
   const load = useCallback(async () => {
     if (ageGroupIds.length === 0) {
       setMatches([])
       setTeams([])
+      setPhases([])
+      setPhaseElements([])
+      setPools([])
+      setElementSlots([])
+      setProgressionRules([])
       setLoading(false)
       return
     }
     setLoading(true)
-    const [m, t] = await Promise.all([
+    const [m, t, p] = await Promise.all([
       supabase
         .from('matches')
         .select('*')
@@ -377,11 +536,66 @@ export default function AdminScheduleView({
         .select('*')
         .in('age_group_id', ageGroupIds)
         .is('deleted_at', null),
+      supabase
+        .from('phases')
+        .select('*')
+        .in('age_group_id', ageGroupIds),
     ])
     if (m.error) toast.error(`Could not load matches: ${m.error.message}`)
     if (t.error) toast.error(`Could not load teams: ${t.error.message}`)
+    if (p.error) toast.error(`Could not load phases: ${p.error.message}`)
+    const loadedPhases = (p.data ?? []) as Phase[]
+    const phaseIds = loadedPhases.map((phase) => phase.id)
+    let loadedElements: PhaseElement[] = []
+    let loadedSlots: ElementSlot[] = []
+    let loadedRules: ProgressionRule[] = []
+
+    if (phaseIds.length > 0) {
+      const [elementsRes, poolsRes] = await Promise.all([
+        supabase.from('phase_elements').select('*').in('phase_id', phaseIds),
+        supabase.from('pools').select('*').in('phase_id', phaseIds),
+      ])
+      if (poolsRes.error) {
+        toast.error(`Could not load pools: ${poolsRes.error.message}`)
+      } else {
+        setPools((poolsRes.data ?? []) as Pool[])
+      }
+      if (elementsRes.error) {
+        toast.error(`Could not load phase elements: ${elementsRes.error.message}`)
+      } else {
+        loadedElements = (elementsRes.data ?? []) as PhaseElement[]
+        const elementIds = loadedElements.map((element) => element.id)
+        if (elementIds.length > 0) {
+          const [slotsRes, rulesRes] = await Promise.all([
+            supabase
+              .from('element_slots')
+              .select('*')
+              .in('phase_element_id', elementIds),
+            supabase
+              .from('progression_rules')
+              .select('*')
+              .in('to_element_id', elementIds),
+          ])
+          if (slotsRes.error) {
+            toast.error(`Could not load element slots: ${slotsRes.error.message}`)
+          } else {
+            loadedSlots = (slotsRes.data ?? []) as ElementSlot[]
+          }
+          if (rulesRes.error) {
+            toast.error(`Could not load progression rules: ${rulesRes.error.message}`)
+          } else {
+            loadedRules = (rulesRes.data ?? []) as ProgressionRule[]
+          }
+        }
+      }
+    }
+
     setMatches((m.data ?? []) as Match[])
     setTeams((t.data ?? []) as Team[])
+    setPhases(loadedPhases)
+    setPhaseElements(loadedElements)
+    setElementSlots(loadedSlots)
+    setProgressionRules(loadedRules)
     setLoading(false)
   }, [supabase, ageGroupIds])
 
@@ -471,14 +685,15 @@ export default function AdminScheduleView({
     return matches
       .map((m) => {
         const g = groupById.get(m.age_group_id)
-        const home = teamById.get(m.home_team_id)
-        const away = teamById.get(m.away_team_id)
-        if (!g || !home || !away) return null
+        const home = m.home_team_id ? teamById.get(m.home_team_id) : null
+        const away = m.away_team_id ? teamById.get(m.away_team_id) : null
+        if (!g) return null
         return {
           ...m,
-          homeName: home.name,
-          awayName: away.name,
+          homeName: home?.name ?? slotSourceLabel(m.home_slot_id),
+          awayName: away?.name ?? slotSourceLabel(m.away_slot_id),
           groupName: g.name,
+          stageLabel: matchStageRoundLabel(m, poolById, elementById, phaseById),
           groupDay: g.day,
           groupColor:
             groupColorMap.get(g.id) ?? AGE_GROUP_PALETTE[0],
@@ -486,7 +701,190 @@ export default function AdminScheduleView({
       })
       .filter((m): m is MatchWithMeta => m !== null)
       .filter((m) => m.groupDay === day)
-  }, [matches, groupById, teamById, groupColorMap, day])
+  }, [matches, groupById, teamById, slotSourceLabel, groupColorMap, day, poolById, elementById, phaseById])
+
+  const sourcePhaseIdsForMatch = useCallback(
+    (match: Match): Set<string> => {
+      const ids = new Set<string>()
+
+      function addPhaseFromElement(elementId: string | null) {
+        if (!elementId) return
+        const element = elementById.get(elementId)
+        if (element?.phase_id && element.phase_id !== match.phase_id) {
+          ids.add(element.phase_id)
+        }
+      }
+
+      function addPhaseFromSlot(slotId: string | null) {
+        if (!slotId) return
+        const slot = slotById.get(slotId)
+        if (!slot) return
+
+        if (slot.source_phase_id && slot.source_phase_id !== match.phase_id) {
+          ids.add(slot.source_phase_id)
+        }
+        addPhaseFromElement(slot.source_element_id)
+
+        const rule =
+          rulesByTargetSlot.byId.get(slot.id) ??
+          rulesByTargetSlot.byElementOrder.get(
+            `${slot.phase_element_id}:${slot.display_order}`
+          )
+        if (rule?.from_phase_id && rule.from_phase_id !== match.phase_id) {
+          ids.add(rule.from_phase_id)
+        }
+        addPhaseFromElement(rule?.from_element_id ?? null)
+      }
+
+      addPhaseFromSlot(match.home_slot_id)
+      addPhaseFromSlot(match.away_slot_id)
+      return ids
+    },
+    [elementById, rulesByTargetSlot, slotById]
+  )
+
+  const guardForMatch = useCallback(
+    (
+      match: Match,
+      proposedKickoffIso?: string | null,
+      scheduleMatches: Match[] = matches,
+      requireScheduledSources = false
+    ): SchedulingGuard => {
+      const proposedStart = proposedKickoffIso
+        ? new Date(proposedKickoffIso).getTime()
+        : null
+
+      function withDependentCheck(guard: SchedulingGuard): SchedulingGuard {
+        if (!match.phase_id || proposedStart === null) return guard
+
+        const proposedEnd =
+          proposedStart + Math.max(match.duration_minutes, SLOT_MINUTES) * 60_000
+        const dependentMatch = scheduleMatches.find((candidate) => {
+          if (candidate.id === match.id || candidate.deleted_at !== null) return false
+          if (!candidate.is_planned || !candidate.kickoff_time) return false
+          if (!sourcePhaseIdsForMatch(candidate).has(match.phase_id ?? '')) return false
+          return proposedEnd > new Date(candidate.kickoff_time).getTime()
+        })
+        if (!dependentMatch) return guard
+
+        const dependentPhase = dependentMatch.phase_id
+          ? phaseById.get(dependentMatch.phase_id)?.name
+          : null
+        return {
+          blocked: true,
+          dependent: guard.dependent,
+          reason: `Must finish before ${dependentPhase ?? 'the dependent stage'} starts at ${formatKickoffTime(dependentMatch.kickoff_time)}.`,
+          notBeforeIso: guard.notBeforeIso,
+          notBeforeMin: guard.notBeforeMin,
+        }
+      }
+
+      const sourcePhaseIds = sourcePhaseIdsForMatch(match)
+      if (sourcePhaseIds.size === 0) {
+        return withDependentCheck({
+          blocked: false,
+          dependent: false,
+          reason: null,
+          notBeforeIso: null,
+          notBeforeMin: null,
+        })
+      }
+
+      const sourcePhaseNames = Array.from(sourcePhaseIds)
+        .map((id) => phaseById.get(id)?.name)
+        .filter((name): name is string => Boolean(name))
+      const sourceMatches = scheduleMatches.filter(
+        (candidate) =>
+          candidate.phase_id !== null &&
+          sourcePhaseIds.has(candidate.phase_id) &&
+          candidate.deleted_at === null
+      )
+
+      if (sourceMatches.length === 0) {
+        return withDependentCheck({
+          blocked: requireScheduledSources,
+          dependent: true,
+          reason: `${sourcePhaseNames.join(', ') || 'Previous stage'} has no fixtures yet.`,
+          notBeforeIso: null,
+          notBeforeMin: null,
+        })
+      }
+
+      const unplannedSourceMatches = sourceMatches.filter(
+        (candidate) => candidate.status !== 'completed' && !candidate.is_planned
+      )
+      if (unplannedSourceMatches.length > 0) {
+        return withDependentCheck({
+          blocked: requireScheduledSources,
+          dependent: true,
+          reason: `Schedule ${sourcePhaseNames.join(', ') || 'the previous stage'} first.`,
+          notBeforeIso: null,
+          notBeforeMin: null,
+        })
+      }
+
+      const latestSourceEnd = sourceMatches.reduce<number | null>((latest, candidate) => {
+        if (candidate.status !== 'completed' && !candidate.is_planned) return latest
+        if (!candidate.kickoff_time) return latest
+        const end =
+          new Date(candidate.kickoff_time).getTime() +
+          Math.max(candidate.duration_minutes, SLOT_MINUTES) * 60_000
+        return latest === null ? end : Math.max(latest, end)
+      }, null)
+
+      if (latestSourceEnd === null) {
+        return withDependentCheck({
+          blocked: requireScheduledSources,
+          dependent: true,
+          reason: `${sourcePhaseNames.join(', ') || 'Previous stage'} has no usable schedule yet.`,
+          notBeforeIso: null,
+          notBeforeMin: null,
+        })
+      }
+
+      const notBeforeIso = new Date(latestSourceEnd).toISOString()
+      const baseDate = dateForDay(tournament, day)
+      const notBeforeDate = notBeforeIso.slice(0, 10)
+      const notBeforeMin =
+        baseDate && notBeforeDate === baseDate
+          ? minutesFromIso(notBeforeIso)
+          : baseDate && notBeforeDate < baseDate
+            ? 0
+            : null
+
+      if (proposedKickoffIso) {
+        if (proposedStart !== null && proposedStart < latestSourceEnd) {
+          return withDependentCheck({
+            blocked: true,
+            dependent: true,
+            reason: `Must start after ${sourcePhaseNames.join(', ') || 'the previous stage'} finishes at ${formatKickoffTime(notBeforeIso)}.`,
+            notBeforeIso,
+            notBeforeMin,
+          })
+        }
+      }
+
+      return withDependentCheck({
+        blocked: false,
+        dependent: true,
+        reason: `After ${sourcePhaseNames.join(', ') || 'previous stage'} finishes at ${formatKickoffTime(notBeforeIso)}.`,
+        notBeforeIso,
+        notBeforeMin,
+      })
+    },
+    [day, matches, phaseById, sourcePhaseIdsForMatch, tournament]
+  )
+
+  const schedulingGuardByMatchId = useMemo(() => {
+    const guards = new Map<string, SchedulingGuard>()
+    for (const match of enriched) {
+      guards.set(
+        match.id,
+        guardForMatch(match, match.is_planned ? match.kickoff_time : null)
+      )
+    }
+    return guards
+  }, [enriched, guardForMatch])
 
   const planned = useMemo(
     () => enriched.filter((m) => m.is_planned && m.kickoff_time),
@@ -544,6 +942,7 @@ export default function AdminScheduleView({
     const byTeam = new Map<string, MatchWithMeta[]>()
     for (const m of effectivePlanned) {
       for (const tid of [m.home_team_id, m.away_team_id]) {
+        if (!tid) continue
         const arr = byTeam.get(tid) ?? []
         arr.push(m)
         byTeam.set(tid, arr)
@@ -571,7 +970,7 @@ export default function AdminScheduleView({
     return flagged
   }, [effectivePlanned, backToBackMin])
 
-  // Filter unplanned matches by chosen age group.
+  // Filter unplanned matches by chosen division.
   const filteredUnplanned = useMemo(() => {
     if (unplannedFilter === 'all') return effectiveUnplanned
     return effectiveUnplanned.filter((m) => m.age_group_id === unplannedFilter)
@@ -586,7 +985,7 @@ export default function AdminScheduleView({
     if (!stillVisible) setUnplannedFilter('all')
   }, [effectiveUnplanned, unplannedFilter])
 
-  // Age groups that have at least one unplanned match for this day.
+  // Divisions that have at least one unplanned match for this day.
   const unplannedGroupOptions = useMemo(() => {
     const ids = new Set(effectiveUnplanned.map((m) => m.age_group_id))
     return ageGroups
@@ -595,7 +994,7 @@ export default function AdminScheduleView({
       .sort((a, b) => a.display_order - b.display_order)
   }, [effectiveUnplanned, ageGroups, day])
 
-  // Age groups that have at least one planned match for this day.
+  // Divisions that have at least one planned match for this day.
   const plannedGroupOptions = useMemo(() => {
     const ids = new Set(planned.map((m) => m.age_group_id))
     return ageGroups
@@ -628,7 +1027,7 @@ export default function AdminScheduleView({
     return m
   }, [sortedCourts])
 
-  // Legend: only show age groups that have at least one match this day.
+  // Legend: only show divisions that have at least one match this day.
   const legend = useMemo(() => {
     const ids = new Set(enriched.map((m) => m.age_group_id))
     return ageGroups
@@ -695,6 +1094,18 @@ export default function AdminScheduleView({
           targetMin
         )
         if (!placements) return
+        const blockedPlacement = placements.find((p) => {
+          const placementMatch = groupMatches.find((m) => m.id === p.id)
+          return placementMatch ? guardForMatch(placementMatch, p.kickoff_time).blocked : false
+        })
+        if (blockedPlacement) {
+          const placementMatch = groupMatches.find((m) => m.id === blockedPlacement.id)
+          const guard = placementMatch
+            ? guardForMatch(placementMatch, blockedPlacement.kickoff_time)
+            : null
+          toast.error(guard?.reason ?? 'This fixture cannot be scheduled before its prerequisite stage.')
+          return
+        }
         const next = new Map(previewPlacements)
         for (const p of placements) {
           next.set(p.id, { court: p.court, kickoff_time: p.kickoff_time })
@@ -738,6 +1149,18 @@ export default function AdminScheduleView({
         targetMin
       )
       if (!placements) return
+      const blockedPlacement = placements.find((p) => {
+        const placementMatch = groupMatches.find((m) => m.id === p.id)
+        return placementMatch ? guardForMatch(placementMatch, p.kickoff_time).blocked : false
+      })
+      if (blockedPlacement) {
+        const placementMatch = groupMatches.find((m) => m.id === blockedPlacement.id)
+        const guard = placementMatch
+          ? guardForMatch(placementMatch, blockedPlacement.kickoff_time)
+          : null
+        toast.error(guard?.reason ?? 'This fixture cannot be scheduled before its prerequisite stage.')
+        return
+      }
 
       const updates = await Promise.all(
         placements.map((p) =>
@@ -888,6 +1311,17 @@ export default function AdminScheduleView({
 
   async function handleImportConfirm() {
     if (!parsedImport) return
+    const blockedImport = parsedImport.find((update) => {
+      if (!update.is_planned || !update.kickoff_time) return false
+      const match = matches.find((candidate) => candidate.id === update.id)
+      return match ? guardForMatch(match, update.kickoff_time).blocked : false
+    })
+    if (blockedImport) {
+      const match = matches.find((candidate) => candidate.id === blockedImport.id)
+      const guard = match ? guardForMatch(match, blockedImport.kickoff_time) : null
+      toast.error(guard?.reason ?? 'The import schedules a fixture before its prerequisite stage.')
+      return
+    }
     setImporting(true)
     try {
       const results = await Promise.all(
@@ -972,61 +1406,113 @@ export default function AdminScheduleView({
         startMin: hhmmToMinutes(c.start_time),
         endMin: hhmmToMinutes(c.end_time),
       }))
-      const matchesInput: AutoPlanMatch[] = filteredUnplanned.map((m) => ({
-        id: m.id,
-        ageGroupId: m.age_group_id,
-        homeTeamId: m.home_team_id,
-        awayTeamId: m.away_team_id,
-        durationMinutes: m.duration_minutes,
-      }))
-      // All currently-planned matches across the day act as locks. Locks on
-      // non-selected courts won't be iterated by the planner but their team
-      // trackers (back-to-back / fairness) and group-court affinity still feed
-      // the scoring. This is what we want when a group already has games on a
-      // court the user didn't include in this run.
-      const locks: AutoPlanLock[] = planned
-        .filter((m) => m.court && m.kickoff_time)
-        .map((m) => ({
-          matchId: m.id,
-          ageGroupId: m.age_group_id,
-          homeTeamId: m.home_team_id,
-          awayTeamId: m.away_team_id,
-          court: m.court ?? '',
-          startMin: m.kickoff_time ? minutesFromIso(m.kickoff_time) : 0,
-          durationMinutes: m.duration_minutes,
-        }))
-
-      const result = autoPlan({
-        courts: courtsInput,
-        matches: matchesInput,
-        locks,
-        backToBackMin: Math.max(0, backToBackMin),
-      })
-
       const next = new Map<string, { court: string; kickoff_time: string }>()
       const baseIso = `${baseDate}T08:00:00.000Z`
-      for (const p of result.placements) {
-        const hhmm = minutesToHHMM(p.startMin)
-        next.set(p.matchId, {
-          court: p.court,
-          kickoff_time: buildIsoFromLondonTime(baseIso, hhmm),
+      const remaining = new Map(filteredUnplanned.map((match) => [match.id, match]))
+
+      while (remaining.size > 0) {
+        const virtualMatches = matches.map((match) => {
+          const plannedPlacement = next.get(match.id)
+          return plannedPlacement
+            ? {
+                ...match,
+                is_planned: true,
+                court: plannedPlacement.court,
+                kickoff_time: plannedPlacement.kickoff_time,
+              }
+            : match
         })
+
+        const schedulable = Array.from(remaining.values()).filter(
+          (m) => !guardForMatch(m, null, virtualMatches, true).blocked
+        )
+        if (schedulable.length === 0) break
+
+        const locks: AutoPlanLock[] = enriched
+          .map((m) => {
+            const plannedPlacement = next.get(m.id)
+            return plannedPlacement
+              ? {
+                  ...m,
+                  is_planned: true,
+                  court: plannedPlacement.court,
+                  kickoff_time: plannedPlacement.kickoff_time,
+                }
+              : m
+          })
+          .filter((m) => m.is_planned && m.court && m.kickoff_time)
+          .map((m) => ({
+            matchId: m.id,
+            ageGroupId: m.age_group_id,
+            homeTeamId: m.home_team_id ?? `slot:${m.home_slot_id}`,
+            awayTeamId: m.away_team_id ?? `slot:${m.away_slot_id}`,
+            court: m.court ?? '',
+            startMin: m.kickoff_time ? minutesFromIso(m.kickoff_time) : 0,
+            durationMinutes: m.duration_minutes,
+          }))
+
+        const matchesInput: AutoPlanMatch[] = schedulable.map((m) => {
+          const guard = guardForMatch(m, null, virtualMatches, true)
+          return {
+            id: m.id,
+            ageGroupId: m.age_group_id,
+            homeTeamId: m.home_team_id ?? `slot:${m.home_slot_id}`,
+            awayTeamId: m.away_team_id ?? `slot:${m.away_slot_id}`,
+            durationMinutes: m.duration_minutes,
+            notBeforeMin: guard.notBeforeMin,
+          }
+        })
+
+        const result = autoPlan({
+          courts: courtsInput,
+          matches: matchesInput,
+          locks,
+          backToBackMin: Math.max(0, backToBackMin),
+        })
+
+        if (result.placements.length === 0) break
+
+        for (const p of result.placements) {
+          const hhmm = minutesToHHMM(p.startMin)
+          next.set(p.matchId, {
+            court: p.court,
+            kickoff_time: buildIsoFromLondonTime(baseIso, hhmm),
+          })
+          remaining.delete(p.matchId)
+        }
       }
+
       setPreviewPlacements(next)
-      setPreviewStats(result.stats)
-      if (result.placements.length === 0) {
-        toast.error('No placements possible — check court windows / durations')
+      const previewMinutes = Array.from(next.entries()).flatMap(([id, placement]) => {
+        const match = filteredUnplanned.find((candidate) => candidate.id === id)
+        if (!match) return []
+        const start = minutesFromIso(placement.kickoff_time)
+        return [start, start + match.duration_minutes]
+      })
+      setPreviewStats({
+        placed: next.size,
+        totalUnplanned: filteredUnplanned.length,
+        earliestStart:
+          previewMinutes.length > 0 ? Math.min(...previewMinutes) : null,
+        latestEnd:
+          previewMinutes.length > 0 ? Math.max(...previewMinutes) : null,
+      })
+      if (next.size === 0) {
+        toast.error('No placements possible - check court windows / durations')
         return false
       }
+      const skippedCount = filteredUnplanned.length - next.size
+      if (skippedCount > 0) {
+        toast.error(`${skippedCount} match${skippedCount === 1 ? '' : 'es'} skipped because their prerequisite fixtures could not be placed first.`)
+      }
       toast.success(
-        `Preview ready — ${result.placements.length} of ${result.stats.totalUnplanned} placed`
+        `Preview ready - ${next.size} of ${filteredUnplanned.length} placed`
       )
       return true
     } finally {
       setPlanning(false)
     }
   }
-
   async function handleSavePreview() {
     if (previewPlacements.size === 0) {
       toast.error('Nothing to save')
@@ -1038,6 +1524,17 @@ export default function AdminScheduleView({
       court: p.court,
       kickoff_time: p.kickoff_time,
     }))
+    const blockedPlan = plan.find((p) => {
+      const match = enriched.find((candidate) => candidate.id === p.id)
+      return match ? guardForMatch(match, p.kickoff_time).blocked : false
+    })
+    if (blockedPlan) {
+      const match = enriched.find((candidate) => candidate.id === blockedPlan.id)
+      const guard = match ? guardForMatch(match, blockedPlan.kickoff_time) : null
+      setSavingPreview(false)
+      toast.error(guard?.reason ?? 'A fixture is scheduled before its prerequisite stage.')
+      return
+    }
     const { data, error } = await supabase.rpc('commit_schedule', { plan })
     setSavingPreview(false)
     if (error) {
@@ -1053,6 +1550,11 @@ export default function AdminScheduleView({
 
   async function handleMobileAssign(court: string, kickoff_time: string) {
     if (!mobileAssignMatch) return
+    const guard = guardForMatch(mobileAssignMatch, kickoff_time)
+    if (guard.blocked) {
+      toast.error(guard.reason ?? 'This fixture cannot be scheduled before its prerequisite stage.')
+      return
+    }
     setSavingAssignment(true)
     const { error } = await supabase
       .from('matches')
@@ -1441,7 +1943,7 @@ export default function AdminScheduleView({
       )}
 
       <div className="flex gap-2">
-        {(['saturday', 'sunday'] as Day[]).map((d) => (
+        {dayOptions.map((d) => (
           <button
             key={d}
             type="button"
@@ -1452,7 +1954,7 @@ export default function AdminScheduleView({
                 : 'rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800'
             }
           >
-            {d === 'saturday' ? 'Saturday' : 'Sunday'}
+            {labelForLegacyDay(tournament, d)}
           </button>
         ))}
       </div>
@@ -1460,7 +1962,7 @@ export default function AdminScheduleView({
       {legend.length > 0 && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs dark:border-zinc-800 dark:bg-zinc-950">
           <span className="font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-            Age groups
+            Divisions
           </span>
           {legend.map((g) => {
             const c = groupColorMap.get(g.id) ?? AGE_GROUP_PALETTE[0]
@@ -1543,6 +2045,7 @@ export default function AdminScheduleView({
                 onRegenerate={() => setRegeneratingGroupId(unplannedFilter)}
                 isRegenerating={isRegenerating}
                 selectedIds={selectedIds}
+                schedulingGuardByMatchId={schedulingGuardByMatchId}
                 onToggleSelected={toggleSelected}
                 onMobileAssign={(m) => setMobileAssignMatch(m)}
               />
@@ -1558,6 +2061,7 @@ export default function AdminScheduleView({
                 gridStartMin={gridStartMin}
                 totalSlots={totalSlots}
                 selectedIds={selectedIds}
+                schedulingGuardByMatchId={schedulingGuardByMatchId}
                 onToggleSelected={toggleSelected}
                 onClearSelection={clearSelection}
                 mobileSelectedCourt={mobileSelectedCourt}
@@ -1577,6 +2081,7 @@ export default function AdminScheduleView({
                       ? selectedIds.size
                       : 0
                   }
+                  schedulingGuard={schedulingGuardByMatchId.get(activeMatch.id)}
                 />
               </div>
             ) : null}
@@ -1653,7 +2158,7 @@ export default function AdminScheduleView({
               Regenerate Fixtures
             </h3>
             <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-              This will delete all currently unplanned fixtures for <strong className="text-zinc-900 dark:text-zinc-100">{groupById.get(regeneratingGroupId)?.name}</strong> and generate a fresh set using the latest round-robin algorithm.
+              This will delete all currently unplanned fixtures for <strong className="text-zinc-900 dark:text-zinc-100">{groupById.get(regeneratingGroupId)?.name}</strong> and generate a fresh set from the configured format.
             </p>
             <p className="mt-3 text-sm font-semibold text-amber-600 dark:text-amber-500">
               Matches that have already been played or scheduled on courts will not be affected.
@@ -1694,7 +2199,6 @@ export default function AdminScheduleView({
     </div>
   )
 }
-
 function AutoPlanDialog({
   ageGroups,
   courts,
@@ -1749,7 +2253,7 @@ function AutoPlanDialog({
         <div className="space-y-4 px-4 py-3">
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-              Age group
+              Division
             </label>
             <select
               value={groupId}
@@ -1757,7 +2261,7 @@ function AutoPlanDialog({
               className="w-full rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-sm text-zinc-900 shadow-sm focus:border-mk-red focus:outline-none focus:ring-1 focus:ring-mk-red dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
             >
               <option value="all">
-                All age groups ({unplannedByGroup.length})
+                All divisions ({unplannedByGroup.length})
               </option>
               {ageGroups.map((g) => {
                 const n = unplannedByGroup.filter(
@@ -1862,7 +2366,6 @@ function AutoPlanDialog({
     </div>
   )
 }
-
 function UnplanDialog({
   ageGroups,
   plannedByGroup,
@@ -1902,14 +2405,14 @@ function UnplanDialog({
             Unplan matches
           </h3>
           <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-            Select which age groups to remove from the schedule.
+            Select which divisions to remove from the schedule.
           </p>
         </header>
         <div className="space-y-4 px-4 py-3">
           <div>
             <div className="mb-1 flex items-center justify-between">
               <label className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-                Age groups
+                Divisions
               </label>
               <div className="flex gap-2 text-xs">
                 <button
@@ -1986,7 +2489,6 @@ function UnplanDialog({
     </div>
   )
 }
-
 function ImportConfirmDialog({
   updates,
   importing,
@@ -2088,21 +2590,20 @@ function MobileAssignDialog({
   onAssign: (court: string, kickoffTime: string) => Promise<void>
   onUnplan: (id: string) => Promise<void>
 }) {
-  const [court, setCourt] = useState(match.court ?? courts[0]?.name ?? '')
-  const [slotIdx, setSlotIdx] = useState<number>(0)
-
-  useEffect(() => {
-    const window = courtWindowByName.get(court)
-    if (window) {
-      if (match.is_planned && match.kickoff_time && match.court === court) {
-        const matchMin = minutesFromIso(match.kickoff_time)
-        setSlotIdx(Math.floor((matchMin - gridStartMin) / 5))
-      } else {
-        const idx = Math.max(0, Math.floor((window.startMin - gridStartMin) / 5))
-        setSlotIdx(idx)
-      }
+  function defaultSlotForCourt(courtName: string) {
+    const window = courtWindowByName.get(courtName)
+    if (!window) return 0
+    if (match.is_planned && match.kickoff_time && match.court === courtName) {
+      const matchMin = minutesFromIso(match.kickoff_time)
+      return Math.floor((matchMin - gridStartMin) / 5)
     }
-  }, [court, courtWindowByName, gridStartMin, match.is_planned, match.court, match.kickoff_time])
+    return Math.max(0, Math.floor((window.startMin - gridStartMin) / 5))
+  }
+
+  const [court, setCourt] = useState(match.court ?? courts[0]?.name ?? '')
+  const [slotIdx, setSlotIdx] = useState<number>(() =>
+    defaultSlotForCourt(match.court ?? courts[0]?.name ?? '')
+  )
 
   const timeOptions = useMemo(() => {
     const options = []
@@ -2118,14 +2619,12 @@ function MobileAssignDialog({
     return options
   }, [court, courtWindowByName, gridStartMin, totalSlots, match.duration_minutes])
 
-  useEffect(() => {
-    if (timeOptions.length > 0 && !timeOptions.find(o => o.idx === slotIdx)) {
-      setSlotIdx(timeOptions[0].idx)
-    }
-  }, [timeOptions, slotIdx])
+  const effectiveSlotIdx = timeOptions.find((option) => option.idx === slotIdx)
+    ? slotIdx
+    : timeOptions[0]?.idx ?? slotIdx
 
   async function handleConfirm() {
-    const startMin = gridStartMin + slotIdx * 5
+    const startMin = gridStartMin + effectiveSlotIdx * 5
     const kickoff_time = buildIsoFromLondonTime(baseIso, minutesToHHMM(startMin))
     await onAssign(court, kickoff_time)
   }
@@ -2157,7 +2656,11 @@ function MobileAssignDialog({
             </label>
             <select
               value={court}
-              onChange={(e) => setCourt(e.target.value)}
+              onChange={(e) => {
+                const nextCourt = e.target.value
+                setCourt(nextCourt)
+                setSlotIdx(defaultSlotForCourt(nextCourt))
+              }}
               className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-mk-red focus:outline-none focus:ring-1 focus:ring-mk-red dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
             >
               {courts.map((c) => (
@@ -2173,7 +2676,7 @@ function MobileAssignDialog({
               Kickoff time
             </label>
             <select
-              value={slotIdx}
+              value={effectiveSlotIdx}
               onChange={(e) => setSlotIdx(Number(e.target.value))}
               className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-mk-red focus:outline-none focus:ring-1 focus:ring-mk-red dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
             >
@@ -2239,6 +2742,7 @@ function UnplannedColumn({
   onRegenerate,
   isRegenerating,
   selectedIds,
+  schedulingGuardByMatchId,
   onToggleSelected,
   onMobileAssign,
 }: {
@@ -2258,6 +2762,7 @@ function UnplannedColumn({
   onRegenerate: () => void
   isRegenerating: boolean
   selectedIds: Set<string>
+  schedulingGuardByMatchId: Map<string, SchedulingGuard>
   onToggleSelected: (id: string, additive: boolean) => void
   onMobileAssign: (m: MatchWithMeta) => void
 }) {
@@ -2333,7 +2838,7 @@ function UnplannedColumn({
             className="w-full rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
             title={
               filterValue === 'all'
-                ? 'Select a specific age group below to regenerate its fixtures'
+                ? 'Select a specific division below to regenerate its fixtures'
                 : locked
                   ? 'Schedule is locked'
                   : isPreviewMode
@@ -2350,7 +2855,7 @@ function UnplannedColumn({
           disabled={filterOptions.length === 0 && filterValue === 'all'}
           className="w-full rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-800 shadow-sm focus:border-mk-red focus:outline-none focus:ring-1 focus:ring-mk-red dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
         >
-          <option value="all">All age groups</option>
+          <option value="all">All divisions</option>
           {filterOptions.map((g) => (
             <option key={g.id} value={g.id}>
               {g.name}
@@ -2370,7 +2875,8 @@ function UnplannedColumn({
             <DraggableMatch
               key={m.id}
               match={m}
-              locked={locked}
+              locked={locked || Boolean(schedulingGuardByMatchId.get(m.id)?.blocked)}
+              schedulingGuard={schedulingGuardByMatchId.get(m.id)}
               selected={selectedIds.has(m.id)}
               onToggleSelected={onToggleSelected}
               onAssign={() => onMobileAssign(m)}
@@ -2392,6 +2898,7 @@ function ScheduleGrid({
   gridStartMin,
   totalSlots,
   selectedIds,
+  schedulingGuardByMatchId,
   onToggleSelected,
   onClearSelection,
   mobileSelectedCourt,
@@ -2407,6 +2914,7 @@ function ScheduleGrid({
   gridStartMin: number
   totalSlots: number
   selectedIds: Set<string>
+  schedulingGuardByMatchId: Map<string, SchedulingGuard>
   onToggleSelected: (id: string, additive: boolean) => void
   onClearSelection: () => void
   mobileSelectedCourt: string
@@ -2530,6 +3038,7 @@ function ScheduleGrid({
                 courtStartMin={startMin}
                 courtEndMin={endMin}
                 selectedIds={selectedIds}
+                schedulingGuardByMatchId={schedulingGuardByMatchId}
                 onToggleSelected={onToggleSelected}
                 onAssign={onMobileAssign}
               />
@@ -2554,6 +3063,7 @@ function CourtColumnDroppable({
   courtStartMin,
   courtEndMin,
   selectedIds,
+  schedulingGuardByMatchId,
   onToggleSelected,
   onAssign,
 }: {
@@ -2568,6 +3078,7 @@ function CourtColumnDroppable({
   courtStartMin: number
   courtEndMin: number
   selectedIds: Set<string>
+  schedulingGuardByMatchId: Map<string, SchedulingGuard>
   onToggleSelected: (id: string, additive: boolean) => void
   onAssign: (m: MatchWithMeta) => void
 }) {
@@ -2606,6 +3117,7 @@ function CourtColumnDroppable({
             courtClash={courtClashIds.has(m.id)}
             backToBack={backToBackIds.has(m.id)}
             selected={selectedIds.has(m.id)}
+            schedulingGuard={schedulingGuardByMatchId.get(m.id)}
             onToggleSelected={onToggleSelected}
             onAssign={() => onAssign(m)}
             style={{
@@ -2662,6 +3174,7 @@ function DraggableMatch({
   courtClash = false,
   backToBack = false,
   selected = false,
+  schedulingGuard,
   onToggleSelected,
   onAssign,
   style,
@@ -2671,6 +3184,7 @@ function DraggableMatch({
   courtClash?: boolean
   backToBack?: boolean
   selected?: boolean
+  schedulingGuard?: SchedulingGuard
   onToggleSelected?: (id: string, additive: boolean) => void
   onAssign?: () => void
   style?: React.CSSProperties
@@ -2719,7 +3233,7 @@ function DraggableMatch({
         courtClash={courtClash}
         backToBack={backToBack}
         selected={selected}
-        onAssign={onAssign}
+        schedulingGuard={schedulingGuard}
       />
     </div>
   )
@@ -2732,7 +3246,7 @@ function MatchCard({
   backToBack = false,
   selected = false,
   groupCount = 0,
-  onAssign,
+  schedulingGuard,
 }: {
   match: MatchWithMeta
   dragging?: boolean
@@ -2740,12 +3254,14 @@ function MatchCard({
   backToBack?: boolean
   selected?: boolean
   groupCount?: number
-  onAssign?: () => void
+  schedulingGuard?: SchedulingGuard
 }) {
   const c = match.groupColor
   const completed = match.status === 'completed'
   const borderClass = courtClash
     ? 'border-2 border-red-500 dark:border-red-500'
+    : schedulingGuard?.blocked
+      ? 'border-2 border-rose-500 dark:border-rose-500'
     : backToBack
       ? 'border-2 border-amber-500 dark:border-amber-500'
       : `border ${c.border}`
@@ -2762,9 +3278,10 @@ function MatchCard({
         match.is_planned && match.kickoff_time
           ? `Kickoff ${formatKickoffTime(match.kickoff_time)} · ${match.duration_minutes} min`
           : 'Unplanned',
-        match.round_number ? `Round ${match.round_number}` : '',
+        match.stageLabel ?? (match.round_number ? `Round ${match.round_number}` : ''),
         match.court ? `Court: ${match.court}` : '',
         completed ? 'Completed' : '',
+        schedulingGuard?.reason ?? '',
         courtClash ? 'Court clash with another fixture' : '',
         backToBack ? 'Back-to-back match for one of these teams' : '',
       ]
@@ -2791,7 +3308,7 @@ function MatchCard({
       )}
       <p className="flex items-center justify-between text-[9px] font-bold uppercase tracking-wide opacity-80">
         <span className="truncate">
-          {match.groupName}{match.round_number ? ` · R${match.round_number}` : ''}
+          {match.stageLabel ?? match.groupName}
         </span>
         {match.is_planned && match.kickoff_time && (
           <span className="ml-1 shrink-0 tabular-nums">
@@ -2802,6 +3319,11 @@ function MatchCard({
       <p className="truncate font-semibold leading-tight">
         {match.homeName} <span className="opacity-60">vs</span> {match.awayName}
       </p>
+      {schedulingGuard?.dependent && schedulingGuard.reason && (
+        <p className="truncate text-[9px] font-semibold leading-tight opacity-75">
+          {schedulingGuard.reason}
+        </p>
+      )}
     </div>
   )
 }

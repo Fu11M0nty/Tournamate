@@ -1,0 +1,912 @@
+'use client'
+
+import { useEffect, useMemo, useState } from 'react'
+import toast from 'react-hot-toast'
+import {
+  type CompetitionDateInput,
+  syncTournamentCompetitionDates,
+} from '@/lib/competitionDates'
+import { createClient } from '@/lib/supabase'
+import { slugify } from '@/lib/slugify'
+import {
+  SPORTS,
+  type CompetitionDate,
+  type ScoringSystem,
+  type Sport,
+  type Tournament,
+  type TournamentVenue,
+} from '@/lib/types'
+
+interface AdminTournamentGeneralProps {
+  tournament: Tournament
+  onTournamentChanged: () => void
+}
+
+interface DateRow {
+  key: string
+  slug?: string
+  label: string
+  date: string
+}
+
+interface VenueRow {
+  key: string
+  id?: string
+  name: string
+  address_line1: string
+  address_line2: string
+  city: string
+  county: string
+  postcode: string
+  country: string
+  notes: string
+}
+
+function formatDateLabel(date: string): string {
+  if (!date) return ''
+  const [year, month, day] = date.split('-').map(Number)
+  return new Date(year, month - 1, day).toLocaleDateString('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  })
+}
+
+function initialDateRows(tournament: Tournament): DateRow[] {
+  if (!tournament.start_date) {
+    return [{ key: crypto.randomUUID(), label: '', date: '' }]
+  }
+
+  if (!tournament.end_date || tournament.end_date === tournament.start_date) {
+    return [
+      {
+        key: crypto.randomUUID(),
+        slug: 'saturday',
+        label: formatDateLabel(tournament.start_date),
+        date: tournament.start_date,
+      },
+    ]
+  }
+
+  return [
+    {
+      key: crypto.randomUUID(),
+      slug: 'saturday',
+      label: formatDateLabel(tournament.start_date),
+      date: tournament.start_date,
+    },
+    {
+      key: crypto.randomUUID(),
+      slug: 'sunday',
+      label: formatDateLabel(tournament.end_date),
+      date: tournament.end_date,
+    },
+  ]
+}
+
+function emptyVenueRow(): VenueRow {
+  return {
+    key: crypto.randomUUID(),
+    name: '',
+    address_line1: '',
+    address_line2: '',
+    city: '',
+    county: '',
+    postcode: '',
+    country: 'United Kingdom',
+    notes: '',
+  }
+}
+
+function summaryDates(rows: DateRow[]) {
+  const sortedDates = rows
+    .map((row) => row.date)
+    .filter(Boolean)
+    .sort()
+
+  return {
+    start_date: sortedDates[0] ?? null,
+    end_date: sortedDates[sortedDates.length - 1] ?? null,
+  }
+}
+
+function cleanText(value: string): string | null {
+  const trimmed = value.trim()
+  return trimmed === '' ? null : trimmed
+}
+
+export default function AdminTournamentGeneral({
+  tournament,
+  onTournamentChanged,
+}: AdminTournamentGeneralProps) {
+  const supabase = useMemo(() => createClient(), [])
+
+  const [name, setName] = useState(tournament.name)
+  const [slug, setSlug] = useState(tournament.slug)
+  const [slugTouched, setSlugTouched] = useState(true)
+  const [sport, setSport] = useState<Sport>(
+    SPORTS.includes(tournament.sport as Sport)
+      ? (tournament.sport as Sport)
+      : 'Netball'
+  )
+  const [sportOther, setSportOther] = useState(tournament.sport_other ?? '')
+  const [defaultScoringSystemId, setDefaultScoringSystemId] = useState(
+    tournament.default_scoring_system_id ?? ''
+  )
+  const [scoringSystems, setScoringSystems] = useState<ScoringSystem[]>([])
+  const [dateRows, setDateRows] = useState<DateRow[]>(() =>
+    initialDateRows(tournament)
+  )
+  const [venueRows, setVenueRows] = useState<VenueRow[]>(() => {
+    if (tournament.venue_name) {
+      return [
+        {
+          ...emptyVenueRow(),
+          name: tournament.venue_name,
+          city: tournament.venue_city ?? '',
+          county: tournament.venue_county ?? '',
+          postcode: tournament.venue_postcode ?? '',
+        },
+      ]
+    }
+    return [emptyVenueRow()]
+  })
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadGeneralData() {
+      setLoading(true)
+      const [datesRes, venuesRes, scoringRes] = await Promise.all([
+        supabase
+          .from('competition_dates')
+          .select('*')
+          .eq('tournament_id', tournament.id)
+          .order('display_order', { ascending: true })
+          .order('date', { ascending: true }),
+        supabase
+          .from('tournament_venues')
+          .select('*')
+          .eq('tournament_id', tournament.id)
+          .order('display_order', { ascending: true }),
+        supabase.from('scoring_systems').select('*').order('name'),
+      ])
+
+      if (cancelled) return
+
+      if (!datesRes.error) {
+        const dates = (datesRes.data ?? []) as CompetitionDate[]
+        if (dates.length > 0) {
+          setDateRows(
+            dates.map((row) => ({
+              key: row.id,
+              slug: row.slug,
+              label: row.label,
+              date: row.date ?? '',
+            }))
+          )
+        }
+      } else {
+        toast.error(`Could not load dates: ${datesRes.error.message}`)
+      }
+
+      if (!venuesRes.error) {
+        const venues = (venuesRes.data ?? []) as TournamentVenue[]
+        if (venues.length > 0) {
+          setVenueRows(
+            venues.map((venue) => ({
+              key: venue.id,
+              id: venue.id,
+              name: venue.name,
+              address_line1: venue.address_line1 ?? '',
+              address_line2: venue.address_line2 ?? '',
+              city: venue.city ?? '',
+              county: venue.county ?? '',
+              postcode: venue.postcode ?? '',
+              country: venue.country ?? 'United Kingdom',
+              notes: venue.notes ?? '',
+            }))
+          )
+        }
+      } else {
+        toast.error(`Could not load venues: ${venuesRes.error.message}`)
+      }
+
+      if (!scoringRes.error) {
+        setScoringSystems((scoringRes.data ?? []) as ScoringSystem[])
+      } else {
+        toast.error(`Could not load scoring systems: ${scoringRes.error.message}`)
+      }
+
+      setLoading(false)
+    }
+
+    loadGeneralData()
+
+    return () => {
+      cancelled = true
+    }
+  }, [supabase, tournament])
+
+  function handleNameChange(value: string) {
+    setName(value)
+    if (!slugTouched) setSlug(slugify(value))
+  }
+
+  function updateDateRow(key: string, patch: Partial<DateRow>) {
+    setDateRows((rows) =>
+      rows.map((row) => {
+        if (row.key !== key) return row
+        const next = { ...row, ...patch }
+        if (patch.date && !row.label.trim()) {
+          next.label = formatDateLabel(patch.date)
+        }
+        return next
+      })
+    )
+  }
+
+  function updateVenueRow(key: string, patch: Partial<VenueRow>) {
+    setVenueRows((rows) =>
+      rows.map((row) => (row.key === key ? { ...row, ...patch } : row))
+    )
+  }
+
+  function addDateRow() {
+    setDateRows((rows) => [
+      ...rows,
+      { key: crypto.randomUUID(), label: '', date: '' },
+    ])
+  }
+
+  function addVenueRow() {
+    setVenueRows((rows) => [...rows, emptyVenueRow()])
+  }
+
+  function removeDateRow(key: string) {
+    setDateRows((rows) =>
+      rows.length === 1 ? rows : rows.filter((row) => row.key !== key)
+    )
+  }
+
+  function removeVenueRow(key: string) {
+    setVenueRows((rows) =>
+      rows.length === 1 ? [emptyVenueRow()] : rows.filter((row) => row.key !== key)
+    )
+  }
+
+  async function syncVenues(rows: VenueRow[]) {
+    const existingIds = rows.map((row) => row.id).filter(Boolean) as string[]
+    const { data: existing, error: existingError } = await supabase
+      .from('tournament_venues')
+      .select('id')
+      .eq('tournament_id', tournament.id)
+
+    if (existingError) return existingError.message
+
+    const deleteIds = ((existing ?? []) as { id: string }[])
+      .map((row) => row.id)
+      .filter((id) => !existingIds.includes(id))
+
+    if (deleteIds.length > 0) {
+      const { error } = await supabase
+        .from('tournament_venues')
+        .delete()
+        .in('id', deleteIds)
+      if (error) return error.message
+    }
+
+    const payload = rows.map((row, index) => ({
+      ...(row.id ? { id: row.id } : {}),
+      tournament_id: tournament.id,
+      name: row.name.trim(),
+      address_line1: cleanText(row.address_line1),
+      address_line2: cleanText(row.address_line2),
+      city: cleanText(row.city),
+      county: cleanText(row.county),
+      postcode: cleanText(row.postcode),
+      country: cleanText(row.country),
+      notes: cleanText(row.notes),
+      display_order: index + 1,
+    }))
+
+    if (payload.length === 0) return undefined
+
+    const { error } = await supabase
+      .from('tournament_venues')
+      .upsert(payload)
+
+    return error?.message
+  }
+
+  async function applyDefaultScoring(scoringSystemId: string) {
+    if (!scoringSystemId) return undefined
+
+    const { data: divisions, error: divisionsError } = await supabase
+      .from('age_groups')
+      .select('id')
+      .eq('tournament_id', tournament.id)
+
+    if (divisionsError) return divisionsError.message
+
+    const divisionIds = ((divisions ?? []) as { id: string }[]).map((d) => d.id)
+    if (divisionIds.length === 0) return undefined
+
+    const { error: divisionUpdateError } = await supabase
+      .from('age_groups')
+      .update({ scoring_system_id: scoringSystemId })
+      .eq('tournament_id', tournament.id)
+      .is('scoring_system_id', null)
+
+    if (divisionUpdateError) return divisionUpdateError.message
+
+    const { error: phaseUpdateError } = await supabase
+      .from('phases')
+      .update({ scoring_system_id: scoringSystemId })
+      .in('age_group_id', divisionIds)
+      .is('scoring_system_id', null)
+
+    return phaseUpdateError?.message
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+
+    const trimmedName = name.trim()
+    const trimmedSlug = slug.trim()
+    if (!trimmedName || !trimmedSlug) {
+      toast.error('Tournament name and slug are required.')
+      return
+    }
+    if (!/^[a-z0-9-]+$/.test(trimmedSlug)) {
+      toast.error('Slug can only contain lowercase letters, numbers and hyphens.')
+      return
+    }
+    if (sport === 'Other' && !sportOther.trim()) {
+      toast.error('Enter the sport name when selecting Other.')
+      return
+    }
+
+    const validDateRows = dateRows
+      .map((row, index) => ({
+        ...row,
+        label: row.label.trim() || `Date ${index + 1}`,
+        date: row.date.trim(),
+      }))
+      .filter((row) => row.date !== '')
+
+    if (validDateRows.length === 0) {
+      toast.error('Add at least one tournament date.')
+      return
+    }
+
+    const seenDates = new Set<string>()
+    for (const row of validDateRows) {
+      if (seenDates.has(row.date)) {
+        toast.error('Each tournament date must be unique.')
+        return
+      }
+      seenDates.add(row.date)
+    }
+
+    const validVenueRows = venueRows.filter((row) =>
+      [
+        row.name,
+        row.address_line1,
+        row.address_line2,
+        row.city,
+        row.county,
+        row.postcode,
+        row.notes,
+      ].some((value) => value.trim() !== '')
+    )
+
+    if (validVenueRows.some((row) => row.name.trim() === '')) {
+      toast.error('Each venue needs a name.')
+      return
+    }
+
+    const sortedDateRows = [...validDateRows].sort((a, b) =>
+      a.date.localeCompare(b.date)
+    )
+    const summary = summaryDates(sortedDateRows)
+
+    setSaving(true)
+    const { data, error } = await supabase
+      .from('tournaments')
+      .update({
+        name: trimmedName,
+        slug: trimmedSlug,
+        sport,
+        sport_other: sport === 'Other' ? sportOther.trim() : null,
+        default_scoring_system_id: defaultScoringSystemId || null,
+        start_date: summary.start_date,
+        end_date: summary.end_date,
+      })
+      .eq('id', tournament.id)
+      .select()
+
+    if (error) {
+      setSaving(false)
+      toast.error(`Could not save general details: ${error.message}`)
+      return
+    }
+    if (!data || data.length === 0) {
+      setSaving(false)
+      toast.error('Update blocked by Supabase row-level security.')
+      return
+    }
+
+    const dateInputs: CompetitionDateInput[] = sortedDateRows.map(
+      (row, index) => ({
+        slug: row.slug || slugify(row.label) || `date-${index + 1}`,
+        label: row.label,
+        date: row.date,
+      })
+    )
+
+    const dateResult = await syncTournamentCompetitionDates(
+      supabase,
+      tournament.id,
+      dateInputs
+    )
+    if (dateResult.error) {
+      setSaving(false)
+      toast.error(`General details saved, but dates were not synced: ${dateResult.error}`)
+      onTournamentChanged()
+      return
+    }
+
+    const venueError = await syncVenues(validVenueRows)
+    if (venueError) {
+      setSaving(false)
+      toast.error(`General details saved, but venues were not synced: ${venueError}`)
+      onTournamentChanged()
+      return
+    }
+
+    const scoringError = await applyDefaultScoring(defaultScoringSystemId)
+    setSaving(false)
+
+    if (scoringError) {
+      toast.error(`Saved, but default scoring was not applied: ${scoringError}`)
+      onTournamentChanged()
+      return
+    }
+
+    toast.success('General details saved')
+    onTournamentChanged()
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="mx-auto max-w-5xl space-y-5">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">
+            General
+          </h1>
+          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+            Core tournament setup, dates, venues, organisers and default rules.
+          </p>
+        </div>
+        <button
+          type="submit"
+          disabled={saving || loading}
+          className="inline-flex items-center justify-center rounded-md bg-tm-navy px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-tm-navy-soft disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {saving ? 'Saving...' : 'Save general'}
+        </button>
+      </header>
+
+      {/* Setup checklist */}
+      {!loading && (
+        <section>
+          <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-zinc-400">
+            Setup checklist
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {(
+              [
+                {
+                  title: 'Tournament details',
+                  done: name.trim() !== '' && slug.trim() !== '',
+                  pending: false,
+                  desc: name.trim() !== '' ? name : 'Name and URL slug needed',
+                },
+                {
+                  title: 'Dates configured',
+                  done: dateRows.some((r) => r.date !== ''),
+                  pending: false,
+                  desc: dateRows.some((r) => r.date !== '')
+                    ? `${dateRows.filter((r) => r.date !== '').length} date${dateRows.filter((r) => r.date !== '').length > 1 ? 's' : ''} set`
+                    : 'No dates added yet',
+                },
+                {
+                  title: 'Venues configured',
+                  done: venueRows.some((r) => r.name.trim() !== ''),
+                  pending: false,
+                  desc: venueRows.some((r) => r.name.trim() !== '')
+                    ? venueRows
+                        .filter((r) => r.name.trim() !== '')
+                        .map((v) => v.name)
+                        .join(', ')
+                    : 'No venue added yet',
+                },
+                {
+                  title: 'Public page ready',
+                  done:
+                    name.trim() !== '' &&
+                    slug.trim() !== '' &&
+                    dateRows.some((r) => r.date !== ''),
+                  pending: false,
+                  desc:
+                    slug.trim() !== ''
+                      ? `/${slug}`
+                      : 'Set details and dates first',
+                },
+                {
+                  title: 'Organisers invited',
+                  done: false,
+                  pending: true,
+                  desc: 'Organiser invites — coming soon',
+                },
+              ] as { title: string; done: boolean; pending: boolean; desc: string }[]
+            ).map(({ title, done, pending, desc }) => (
+              <div
+                key={title}
+                className={`flex items-start gap-3 rounded-lg border p-3 ${
+                  done
+                    ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/60 dark:bg-emerald-950/20'
+                    : pending
+                      ? 'border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900/30'
+                      : 'border-amber-200 bg-amber-50/60 dark:border-amber-900/40 dark:bg-amber-950/10'
+                }`}
+              >
+                <span
+                  className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+                    done
+                      ? 'bg-emerald-500 text-white'
+                      : pending
+                        ? 'border-2 border-zinc-300 text-zinc-300 dark:border-zinc-600 dark:text-zinc-600'
+                        : 'bg-amber-400 text-white'
+                  }`}
+                >
+                  {done ? '✓' : pending ? '' : '!'}
+                </span>
+                <div className="min-w-0">
+                  <p
+                    className={`text-sm font-semibold ${
+                      done
+                        ? 'text-emerald-800 dark:text-emerald-300'
+                        : pending
+                          ? 'text-zinc-400 dark:text-zinc-500'
+                          : 'text-amber-800 dark:text-amber-300'
+                    }`}
+                  >
+                    {title}
+                  </p>
+                  <p className="mt-0.5 truncate text-xs text-zinc-500 dark:text-zinc-400">
+                    {desc}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+        <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-50">
+          Tournament details
+        </h2>
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            Title / name
+            <input
+              type="text"
+              required
+              value={name}
+              onChange={(e) => handleNameChange(e.target.value)}
+              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+            />
+          </label>
+          <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            URL slug
+            <input
+              type="text"
+              required
+              value={slug}
+              onChange={(e) => {
+                setSlugTouched(true)
+                setSlug(e.target.value)
+              }}
+              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+            />
+          </label>
+          <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            Sport
+            <select
+              value={sport}
+              onChange={(e) => setSport(e.target.value as Sport)}
+              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+            >
+              {SPORTS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+          {sport === 'Other' ? (
+            <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              Other sport
+              <input
+                type="text"
+                value={sportOther}
+                onChange={(e) => setSportOther(e.target.value)}
+                className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+              />
+            </label>
+          ) : (
+            <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              Default scoring
+              <select
+                value={defaultScoringSystemId}
+                onChange={(e) => setDefaultScoringSystemId(e.target.value)}
+                className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+              >
+                <option value="">No default selected</option>
+                {scoringSystems.map((system) => (
+                  <option key={system.id} value={system.id}>
+                    {system.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {sport === 'Other' && (
+            <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              Default scoring
+              <select
+                value={defaultScoringSystemId}
+                onChange={(e) => setDefaultScoringSystemId(e.target.value)}
+                className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+              >
+                <option value="">No default selected</option>
+                {scoringSystems.map((system) => (
+                  <option key={system.id} value={system.id}>
+                    {system.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
+      </section>
+
+      <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-50">
+              Tournament dates
+            </h2>
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+              Add every date the tournament, festival or league will run on.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={addDateRow}
+            className="shrink-0 rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          >
+            Add date
+          </button>
+        </div>
+
+        <div className="mt-4 space-y-2">
+          {dateRows.map((row, index) => (
+            <div
+              key={row.key}
+              className="grid gap-2 rounded-md border border-zinc-200 bg-zinc-50 p-2 dark:border-zinc-800 dark:bg-zinc-900/40 sm:grid-cols-[1fr_1fr_auto]"
+            >
+              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                Label
+                <input
+                  type="text"
+                  value={row.label}
+                  onChange={(e) =>
+                    updateDateRow(row.key, { label: e.target.value })
+                  }
+                  placeholder={`Date ${index + 1}`}
+                  className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                />
+              </label>
+              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                Date
+                <input
+                  type="date"
+                  value={row.date}
+                  onChange={(e) =>
+                    updateDateRow(row.key, { date: e.target.value })
+                  }
+                  className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => removeDateRow(row.key)}
+                disabled={dateRows.length === 1}
+                className="self-end rounded-md border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-600 shadow-sm hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-red-900 dark:bg-zinc-900 dark:text-red-400 dark:hover:bg-red-950"
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-50">
+              Venues
+            </h2>
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+              Add one or more locations where this tournament will be hosted.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={addVenueRow}
+            className="shrink-0 rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          >
+            Add venue
+          </button>
+        </div>
+
+        <div className="mt-4 space-y-3">
+          {venueRows.map((venue, index) => (
+            <div
+              key={venue.key}
+              className="space-y-3 rounded-md border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900/40"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                  Venue {index + 1}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => removeVenueRow(venue.key)}
+                  className="rounded-md px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950"
+                >
+                  Remove
+                </button>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                  Venue name
+                  <input
+                    type="text"
+                    value={venue.name}
+                    onChange={(e) =>
+                      updateVenueRow(venue.key, { name: e.target.value })
+                    }
+                    placeholder="Main Sports Centre"
+                    className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                  />
+                </label>
+                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                  Address line 1
+                  <input
+                    type="text"
+                    value={venue.address_line1}
+                    onChange={(e) =>
+                      updateVenueRow(venue.key, { address_line1: e.target.value })
+                    }
+                    className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                  />
+                </label>
+                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                  Address line 2
+                  <input
+                    type="text"
+                    value={venue.address_line2}
+                    onChange={(e) =>
+                      updateVenueRow(venue.key, { address_line2: e.target.value })
+                    }
+                    className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                  />
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                    Town / city
+                    <input
+                      type="text"
+                      value={venue.city}
+                      onChange={(e) =>
+                        updateVenueRow(venue.key, { city: e.target.value })
+                      }
+                      className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                    />
+                  </label>
+                  <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                    Postcode
+                    <input
+                      type="text"
+                      value={venue.postcode}
+                      onChange={(e) =>
+                        updateVenueRow(venue.key, { postcode: e.target.value })
+                      }
+                      className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                    />
+                  </label>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                    County
+                    <input
+                      type="text"
+                      value={venue.county}
+                      onChange={(e) =>
+                        updateVenueRow(venue.key, { county: e.target.value })
+                      }
+                      className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                    />
+                  </label>
+                  <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                    Country
+                    <input
+                      type="text"
+                      value={venue.country}
+                      onChange={(e) =>
+                        updateVenueRow(venue.key, { country: e.target.value })
+                      }
+                      className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                    />
+                  </label>
+                </div>
+                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300 md:col-span-2">
+                  Notes
+                  <textarea
+                    value={venue.notes}
+                    onChange={(e) =>
+                      updateVenueRow(venue.key, { notes: e.target.value })
+                    }
+                    rows={2}
+                    className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                  />
+                </label>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+        <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-50">
+          Tournament organisers
+        </h2>
+        <div className="mt-3 rounded-md border border-dashed border-zinc-300 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/40">
+          <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            Organiser invitations and roles will be managed here.
+          </p>
+          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+            This section is reserved for the next organiser workflow: roles, invite links and profile setup.
+          </p>
+        </div>
+      </section>
+
+      <div className="flex justify-end">
+        <button
+          type="submit"
+          disabled={saving || loading}
+          className="inline-flex items-center justify-center rounded-md bg-tm-navy px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-tm-navy-soft disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {saving ? 'Saving...' : 'Save general'}
+        </button>
+      </div>
+    </form>
+  )
+}

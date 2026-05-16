@@ -110,7 +110,7 @@ export default function AdminTournamentLanding({
         <button
           type="button"
           onClick={() => setCreating(true)}
-          className="inline-flex shrink-0 items-center gap-2 rounded-md bg-mk-red px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-mk-red-dark"
+          className="inline-flex shrink-0 items-center gap-2 rounded-md bg-tm-navy px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-tm-navy-soft"
         >
           <svg
             className="h-4 w-4"
@@ -148,7 +148,7 @@ export default function AdminTournamentLanding({
             placeholder="Search tournaments…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-md border border-zinc-300 bg-white py-2 pl-9 pr-3 text-sm text-zinc-900 shadow-sm focus:border-mk-red focus:outline-none focus:ring-1 focus:ring-mk-red dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+            className="w-full rounded-md border border-zinc-300 bg-white py-2 pl-9 pr-3 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
           />
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -159,7 +159,7 @@ export default function AdminTournamentLanding({
             type="date"
             value={dateFrom}
             onChange={(e) => setDateFrom(e.target.value)}
-            className="rounded-md border border-zinc-300 bg-white px-2 py-2 text-sm text-zinc-900 shadow-sm focus:border-mk-red focus:outline-none focus:ring-1 focus:ring-mk-red dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+            className="rounded-md border border-zinc-300 bg-white px-2 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
           />
           <label className="whitespace-nowrap text-xs font-medium text-zinc-500 dark:text-zinc-400">
             To
@@ -168,7 +168,7 @@ export default function AdminTournamentLanding({
             type="date"
             value={dateTo}
             onChange={(e) => setDateTo(e.target.value)}
-            className="rounded-md border border-zinc-300 bg-white px-2 py-2 text-sm text-zinc-900 shadow-sm focus:border-mk-red focus:outline-none focus:ring-1 focus:ring-mk-red dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+            className="rounded-md border border-zinc-300 bg-white px-2 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
           />
           {(dateFrom || dateTo) && (
             <button
@@ -218,7 +218,7 @@ export default function AdminTournamentLanding({
                   setDateFrom('')
                   setDateTo('')
                 }}
-                className="text-xs font-medium text-mk-red hover:underline"
+                className="text-xs font-medium text-zinc-600 hover:text-zinc-900 hover:underline dark:text-zinc-400"
               >
                 Clear filters
               </button>
@@ -242,7 +242,7 @@ export default function AdminTournamentLanding({
                   className="group flex flex-1 flex-col gap-1.5 px-4 pb-4 pt-4 text-left transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <h2 className="text-base font-bold leading-snug text-zinc-900 group-hover:text-mk-red dark:text-zinc-50 dark:group-hover:text-mk-red">
+                    <h2 className="text-base font-bold leading-snug text-zinc-900 group-hover:text-tm-navy dark:text-zinc-50 dark:group-hover:text-zinc-200">
                       {t.name}
                     </h2>
                     <span
@@ -269,7 +269,7 @@ export default function AdminTournamentLanding({
                     </svg>
                     {formatDateRange(t.start_date, t.end_date)}
                   </p>
-                  <p className="mt-2 text-xs font-semibold text-mk-red opacity-0 transition-opacity group-hover:opacity-100">
+                  <p className="mt-2 text-xs font-semibold text-tm-navy opacity-0 transition-opacity group-hover:opacity-100 dark:text-zinc-300">
                     Enter tournament →
                   </p>
                 </button>
@@ -390,7 +390,7 @@ export default function AdminTournamentLanding({
       {pendingDelete && (
         <ConfirmDialog
           title={`Delete "${pendingDelete.name}"?`}
-          message={`This will permanently delete the tournament and ALL its age groups, teams and matches.`}
+          message={`This will permanently delete the tournament and ALL its divisions, teams and matches.`}
           confirmLabel="Delete tournament"
           onConfirm={() => confirmDelete(pendingDelete)}
           onCancel={() => setPendingDelete(null)}
@@ -399,3 +399,4 @@ export default function AdminTournamentLanding({
     </div>
   )
 }
+

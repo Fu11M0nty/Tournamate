@@ -1,24 +1,25 @@
 import { createPublicSupabaseClient } from '@/lib/supabase'
 import TournamentView from '@/components/TournamentView'
 import NotFoundMessage from '@/components/NotFoundMessage'
-import type { AgeGroup, Day, Match, Team, Tournament } from '@/lib/types'
+import type { Day, Division, ElementSlot, Match, Team, Tournament } from '@/lib/types'
 
 interface Props {
   params: Promise<{
     tournamentSlug: string
     day: string
-    ageGroupSlug: string
+    divisionSlug: string
   }>
-  searchParams: Promise<{ team?: string | string[] }>
+  searchParams: Promise<{ team?: string | string[]; phase?: string | string[] }>
 }
 
-export default async function AgeGroupPage({ params, searchParams }: Props) {
-  const { tournamentSlug, day, ageGroupSlug } = await params
-  const { team: teamParam } = await searchParams
+export default async function DivisionPage({ params, searchParams }: Props) {
+  const { tournamentSlug, day, divisionSlug } = await params
+  const { team: teamParam, phase: phaseParam } = await searchParams
   const teamFilterId = typeof teamParam === 'string' ? teamParam : null
+  const phaseSlug = typeof phaseParam === 'string' ? phaseParam : null
 
   if (day !== 'saturday' && day !== 'sunday') {
-    return <NotFoundMessage title="Group not found" />
+    return <NotFoundMessage title="Division not found" />
   }
 
   const supabase = await createPublicSupabaseClient()
@@ -41,22 +42,22 @@ export default async function AgeGroupPage({ params, searchParams }: Props) {
 
   const { data: allGroupsData } = await supabase
     .from('age_groups')
-    .select('*')
+    .select('*, scoring_system:scoring_systems(*), phases(*, scoring_system:scoring_systems(*), pools(*, pool_teams(*)))')
     .eq('tournament_id', tournament.id)
     .order('display_order', { ascending: true })
 
-  const allGroups: AgeGroup[] = allGroupsData ?? []
-  const saturdayGroups = allGroups.filter((g) => g.day === 'saturday')
-  const sundayGroups = allGroups.filter((g) => g.day === 'sunday')
-  const ageGroupsForDay = day === 'saturday' ? saturdayGroups : sundayGroups
+  const divisions: Division[] = allGroupsData ?? []
+  const saturdayGroups = divisions.filter((g) => g.day === 'saturday')
+  const sundayGroups = divisions.filter((g) => g.day === 'sunday')
+  const divisionsForDay = day === 'saturday' ? saturdayGroups : sundayGroups
 
-  const currentGroup = ageGroupsForDay.find((g) => g.slug === ageGroupSlug)
+  const currentGroup = divisionsForDay.find((g) => g.slug === divisionSlug)
 
   if (!currentGroup) {
     return (
       <NotFoundMessage
-        title="Group not found"
-        description={`There is no "${ageGroupSlug}" age group on ${day === 'saturday' ? 'Saturday' : 'Sunday'}.`}
+        title="Division not found"
+        description={`There is no "${divisionSlug}" division on ${day === 'saturday' ? 'Saturday' : 'Sunday'}.`}
       />
     )
   }
@@ -78,6 +79,13 @@ export default async function AgeGroupPage({ params, searchParams }: Props) {
 
   const teams: Team[] = teamsRes.data ?? []
   const matches: Match[] = matchesRes.data ?? []
+  const slotIds = Array.from(
+    new Set(matches.flatMap((match) => [match.home_slot_id, match.away_slot_id]).filter(Boolean))
+  ) as string[]
+  const slotsRes = slotIds.length > 0
+    ? await supabase.from('element_slots').select('*').in('id', slotIds)
+    : { data: [] }
+  const slots: ElementSlot[] = slotsRes.data ?? []
 
   return (
     <TournamentView
@@ -88,7 +96,10 @@ export default async function AgeGroupPage({ params, searchParams }: Props) {
       sundayGroups={sundayGroups}
       teams={teams}
       matches={matches}
+      slots={slots}
       teamFilterId={teamFilterId}
+      phaseSlug={phaseSlug}
     />
   )
 }
+

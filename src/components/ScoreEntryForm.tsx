@@ -66,8 +66,8 @@ export default function ScoreEntryForm({
   const [status, setStatus] = useState<MatchStatus>(match.status)
   const [kickoffTime, setKickoffTime] = useState<string>(originalTime)
   const [court, setCourt] = useState<string>(originalCourt)
-  const [homeTeamId, setHomeTeamId] = useState<string>(originalHomeId)
-  const [awayTeamId, setAwayTeamId] = useState<string>(originalAwayId)
+  const [homeTeamId, setHomeTeamId] = useState<string>(originalHomeId ?? '')
+  const [awayTeamId, setAwayTeamId] = useState<string>(originalAwayId ?? '')
   const [homeMinsLate, setHomeMinsLate] = useState<string>(
     match.home_late_minutes > 0 ? String(match.home_late_minutes) : ''
   )

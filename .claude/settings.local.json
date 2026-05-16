@@ -21,7 +21,10 @@
       "Bash(New-Item -Path \"C:\\\\Users\\\\Bav\\\\ClaudeCode-Tutorial\\\\Test-Netters-Website\\\\public\\\\logo-horizontal.svg\" -ItemType File -Force)",
       "Bash(Out-Null)",
       "Bash(Write-Host \"ok\")",
-      "PowerShell(New-Item *)"
+      "PowerShell(New-Item *)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\Bav\\\\ClaudeCode-Tutorial\\\\tournamate\\\\src\\\\app\\\\admin\" -Recurse | ForEach-Object { $_.FullName })",
+      "Bash(Select-Object Name, Length)",
+      "Bash(Remove-Item *)"
     ]
   }
 }

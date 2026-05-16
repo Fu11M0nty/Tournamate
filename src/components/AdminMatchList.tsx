@@ -1,17 +1,20 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import ScoreEntryForm from './ScoreEntryForm'
 import TeamLogo from './TeamLogo'
 import MatchScoresheetCapture from './MatchScoresheetCapture'
+import MatchOfficialAssignmentDialog from './MatchOfficialAssignmentDialog'
+import { createClient } from '@/lib/supabase'
 import { forfeitSide } from '@/lib/standings'
 import { formatKickoffTime } from '@/lib/time'
-import type { Match, Team } from '@/lib/types'
+import type { ElementSlot, Match, Team } from '@/lib/types'
 
 interface AdminMatchListProps {
   matches: Match[]
   teams: Team[]
   ageGroupName: string
+  tournamentId?: string
   onSaved: () => void
 }
 
@@ -23,16 +26,65 @@ export default function AdminMatchList({
   matches,
   teams,
   ageGroupName,
+  tournamentId,
   onSaved,
 }: AdminMatchListProps) {
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [assigningId, setAssigningId] = useState<string | null>(null)
   const [filterTeamId, setFilterTeamId] = useState<string | null>(null)
+  const [slots, setSlots] = useState<ElementSlot[]>([])
+
+  const slotIds = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          matches.flatMap((match) => [match.home_slot_id, match.away_slot_id]).filter(Boolean)
+        )
+      ) as string[],
+    [matches]
+  )
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadSlots() {
+      if (slotIds.length === 0) {
+        setSlots([])
+        return
+      }
+
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from('element_slots')
+        .select('*')
+        .in('id', slotIds)
+
+      if (cancelled) return
+      if (error) {
+        setSlots([])
+        return
+      }
+      setSlots((data ?? []) as ElementSlot[])
+    }
+
+    loadSlots()
+
+    return () => {
+      cancelled = true
+    }
+  }, [slotIds])
 
   const teamById = useMemo(() => {
     const map = new Map<string, Team>()
     for (const t of teams) map.set(t.id, t)
     return map
   }, [teams])
+
+  const slotById = useMemo(() => {
+    const map = new Map<string, ElementSlot>()
+    for (const slot of slots) map.set(slot.id, slot)
+    return map
+  }, [slots])
 
   const sortedTeams = useMemo(
     () => [...teams].sort((a, b) => a.name.localeCompare(b.name)),
@@ -64,7 +116,10 @@ export default function AdminMatchList({
   const duplicateIds = useMemo(() => {
     const byPair = new Map<string, string[]>()
     for (const m of matches) {
-      const key = [m.home_team_id, m.away_team_id].sort().join('|')
+      const key = [
+        m.home_team_id ?? `slot:${m.home_slot_id ?? 'home'}`,
+        m.away_team_id ?? `slot:${m.away_slot_id ?? 'away'}`,
+      ].sort().join('|')
       const arr = byPair.get(key) ?? []
       arr.push(m.id)
       byPair.set(key, arr)
@@ -79,13 +134,25 @@ export default function AdminMatchList({
   const editingMatch = editingId
     ? sorted.find((m) => m.id === editingId) ?? null
     : null
-  const editingHome = editingMatch ? teamById.get(editingMatch.home_team_id) : null
-  const editingAway = editingMatch ? teamById.get(editingMatch.away_team_id) : null
+  const editingHome = editingMatch?.home_team_id ? teamById.get(editingMatch.home_team_id) : null
+  const editingAway = editingMatch?.away_team_id ? teamById.get(editingMatch.away_team_id) : null
+
+  function entrantLabel(team: Team | null, slotId: string | null) {
+    if (team) return { label: team.name, placeholder: false }
+    const slot = slotId ? slotById.get(slotId) : null
+    if (slot?.label) return { label: slot.label, placeholder: true }
+    if (slot?.source_outcome === 'winner') return { label: 'Winner of previous fixture', placeholder: true }
+    if (slot?.source_outcome === 'loser') return { label: 'Loser of previous fixture', placeholder: true }
+    if (slot?.source_outcome === 'rank' && slot.source_rank) {
+      return { label: `${slot.source_rank} place qualifier`, placeholder: true }
+    }
+    return { label: 'TBD', placeholder: true }
+  }
 
   if (sorted.length === 0) {
     return (
       <p className="rounded-lg border border-dashed border-zinc-300 bg-white p-6 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-400">
-        No matches in this age group.
+        No matches in this division.
       </p>
     )
   }
@@ -144,9 +211,11 @@ export default function AdminMatchList({
       ) : (
       <ul className="divide-y divide-zinc-200 overflow-hidden rounded-lg border border-zinc-200 bg-white dark:divide-zinc-800 dark:border-zinc-800 dark:bg-zinc-950">
         {visible.map((match) => {
-          const home = teamById.get(match.home_team_id)
-          const away = teamById.get(match.away_team_id)
-          if (!home || !away) return null
+          const home = match.home_team_id ? teamById.get(match.home_team_id) ?? null : null
+          const away = match.away_team_id ? teamById.get(match.away_team_id) ?? null : null
+          const homeEntrant = entrantLabel(home, match.home_slot_id)
+          const awayEntrant = entrantLabel(away, match.away_slot_id)
+          const isPlaceholder = !home || !away
 
           const hasScore =
             match.home_score !== null && match.away_score !== null
@@ -201,8 +270,16 @@ export default function AdminMatchList({
                     Forfeit {forfeit.reason === 'no_show' ? '· no show' : '· late'}
                   </span>
                 )}
-                <span className="font-medium">{home.name}</span>
-                {match.home_umpire_no_show && (
+                <span
+                  className={
+                    homeEntrant.placeholder
+                      ? 'font-medium text-amber-700 dark:text-amber-300'
+                      : 'font-medium'
+                  }
+                >
+                  {homeEntrant.label}
+                </span>
+                {home && match.home_umpire_no_show && (
                   <span
                     title={`${home.name} did not provide an umpire — −1 pt`}
                     className="ml-1 rounded-sm bg-red-600 px-1 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white"
@@ -211,8 +288,16 @@ export default function AdminMatchList({
                   </span>
                 )}
                 <span className="mx-2 text-zinc-400">vs</span>
-                <span className="font-medium">{away.name}</span>
-                {match.away_umpire_no_show && (
+                <span
+                  className={
+                    awayEntrant.placeholder
+                      ? 'font-medium text-amber-700 dark:text-amber-300'
+                      : 'font-medium'
+                  }
+                >
+                  {awayEntrant.label}
+                </span>
+                {away && match.away_umpire_no_show && (
                   <span
                     title={`${away.name} did not provide an umpire — −1 pt`}
                     className="ml-1 rounded-sm bg-red-600 px-1 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white"
@@ -255,10 +340,10 @@ export default function AdminMatchList({
                   {(homeLateApplied || awayLateApplied) && (
                     <span
                       title={[
-                        homeLateApplied
+                        homeLateApplied && home
                           ? `${home.name}: −${match.home_late_minutes * 2} goals (${match.home_late_minutes} min late)`
                           : null,
-                        awayLateApplied
+                        awayLateApplied && away
                           ? `${away.name}: −${match.away_late_minutes * 2} goals (${match.away_late_minutes} min late)`
                           : null,
                       ]
@@ -287,9 +372,20 @@ export default function AdminMatchList({
                   <div className="hidden sm:block">
                     <MatchScoresheetCapture match={match} onUploaded={onSaved} />
                   </div>
+                  {tournamentId && (
+                    <button
+                      type="button"
+                      onClick={() => setAssigningId(match.id)}
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 sm:flex-none"
+                    >
+                      whistle <span className="hidden sm:inline">Assign</span>
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setEditingId(match.id)}
+                    disabled={isPlaceholder}
+                    title={isPlaceholder ? 'Start the phase to resolve teams before entering scores' : undefined}
                     className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 sm:flex-none"
                   >
                     ✏️ <span className="hidden sm:inline">Edit</span>
@@ -317,6 +413,18 @@ export default function AdminMatchList({
             onSaved()
           }}
           onCancel={() => setEditingId(null)}
+        />
+      )}
+
+      {assigningId && tournamentId && (
+        <MatchOfficialAssignmentDialog
+          matchId={assigningId}
+          tournamentId={tournamentId}
+          onSaved={() => {
+            setAssigningId(null)
+            onSaved()
+          }}
+          onCancel={() => setAssigningId(null)}
         />
       )}
     </>

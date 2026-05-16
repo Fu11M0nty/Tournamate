@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
+import { signInWithDevAdmin } from '@/lib/auth-actions'
 
 function OAuthButton({
   onClick,
@@ -52,6 +53,15 @@ const AppleIcon = () => (
   </svg>
 )
 
+function getSafeNextPath() {
+  if (typeof window === 'undefined') return '/admin'
+  const nextPath = new URLSearchParams(window.location.search).get('next')
+  if (!nextPath || !nextPath.startsWith('/admin')) return '/admin'
+  if (nextPath.startsWith('/admin/login') || nextPath.startsWith('/admin/signup')) return '/admin'
+  if (nextPath.startsWith('//') || nextPath.includes('://')) return '/admin'
+  return nextPath
+}
+
 export default function AdminLoginPage() {
   const router = useRouter()
   const [email, setEmail] = useState('')
@@ -59,6 +69,7 @@ export default function AdminLoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [oauthLoading, setOauthLoading] = useState<string | null>(null)
+  const [devLoginPending, startDevLoginTransition] = useTransition()
   const supabase = createClient()
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -77,7 +88,7 @@ export default function AdminLoginPage() {
       return
     }
 
-    router.push('/admin')
+    router.push(getSafeNextPath())
     router.refresh()
   }
 
@@ -85,10 +96,25 @@ export default function AdminLoginPage() {
     setOauthLoading(provider)
     await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: `${window.location.origin}/admin` },
+      options: { redirectTo: `${window.location.origin}${getSafeNextPath()}` },
     })
     // browser redirects — loading state intentionally not cleared
   }
+
+  function handleDevLogin() {
+    setError(null)
+    startDevLoginTransition(async () => {
+      const result = await signInWithDevAdmin()
+      if (!result.success) {
+        setError(result.error ?? 'Could not sign in as dev admin.')
+        return
+      }
+      router.push(getSafeNextPath())
+      router.refresh()
+    })
+  }
+
+  const showDevLogin = process.env.NODE_ENV === 'development'
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-sm flex-col justify-center px-6 py-12">
@@ -186,12 +212,28 @@ export default function AdminLoginPage() {
 
           <button
             type="submit"
-            disabled={submitting || !!oauthLoading}
+            disabled={submitting || !!oauthLoading || devLoginPending}
             className="w-full rounded-md bg-mk-red px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-mk-red-dark disabled:cursor-not-allowed disabled:opacity-60"
           >
             {submitting ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
+
+        {showDevLogin && (
+          <div className="mt-4 border-t border-zinc-100 pt-4 dark:border-zinc-800">
+            <button
+              type="button"
+              onClick={handleDevLogin}
+              disabled={submitting || !!oauthLoading || devLoginPending}
+              className="w-full rounded-md border border-dashed border-amber-400 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-900 transition-colors hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200 dark:hover:bg-amber-900/60"
+            >
+              {devLoginPending ? 'Signing in as dev admin...' : 'Sign in as dev admin'}
+            </button>
+            <p className="mt-2 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
+              Local development only. Uses the server-only E2E admin credentials and still requires an approved admin profile.
+            </p>
+          </div>
+        )}
 
         <p className="mt-5 border-t border-zinc-100 pt-4 text-center text-sm text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
           Want to use TournaMate?{' '}

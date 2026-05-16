@@ -87,7 +87,7 @@ export default function TournamentCloneForm({
             From {source.name}
           </h2>
           <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-            Copies age groups, teams and the fixture schedule. Scores, penalties
+            Copies divisions, teams and the fixture schedule. Scores, penalties
             and scoresheets are not copied.
           </p>
         </header>
@@ -209,3 +209,4 @@ export default function TournamentCloneForm({
     </div>
   )
 }
+

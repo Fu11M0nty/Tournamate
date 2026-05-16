@@ -246,7 +246,7 @@ export default function RegisterInterestPage() {
               value={form.notes}
               onChange={e => set('notes', e.target.value)}
               rows={4}
-              placeholder="Tell us more — number of age groups, specific features you need, questions…"
+              placeholder="Tell us more — number of divisions, specific features you need, questions…"
               className="w-full resize-none rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm transition-colors focus:border-tm-orange focus:outline-none focus:ring-1 focus:ring-tm-orange"
             />
           </Field>
@@ -320,3 +320,4 @@ function SelectInput({
     </select>
   )
 }
+

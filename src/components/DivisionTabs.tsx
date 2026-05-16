@@ -1,34 +1,34 @@
 import Link from 'next/link'
-import type { AgeGroup, Day } from '@/lib/types'
+import type { Division, Day } from '@/lib/types'
 
-interface AgeGroupTabsProps {
+interface DivisionTabsProps {
   tournamentSlug: string
-  ageGroups: AgeGroup[]
+  divisions: Division[]
   currentSlug: string
   day: Day
 }
 
-export default function AgeGroupTabs({
+export default function DivisionTabs({
   tournamentSlug,
-  ageGroups,
+  divisions,
   currentSlug,
   day,
-}: AgeGroupTabsProps) {
-  if (ageGroups.length === 0) {
+}: DivisionTabsProps) {
+  if (divisions.length === 0) {
     return (
       <div className="border-b border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">
-        No age groups scheduled for this day.
+        No divisions scheduled for this day.
       </div>
     )
   }
 
-  const sorted = [...ageGroups].sort(
+  const sorted = [...divisions].sort(
     (a, b) => a.display_order - b.display_order
   )
 
   return (
     <nav
-      aria-label="Age group"
+      aria-label="Division"
       className="overflow-x-auto whitespace-nowrap border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950"
     >
       <ul className="flex w-max gap-1 px-4 py-2">
@@ -54,3 +54,5 @@ export default function AgeGroupTabs({
     </nav>
   )
 }
+
+
