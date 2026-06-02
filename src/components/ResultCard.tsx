@@ -6,7 +6,7 @@ import type { Match, ScoringSystem, Team } from '@/lib/types'
 interface ResultCardProps {
   match: Match
   homeTeam: Team
-  awayTeam: Team
+  awayTeam: Team | null
   scoringSystem: ScoringSystem
   stageLabel?: string
 }
@@ -73,9 +73,10 @@ export default function ResultCard({
   scoringSystem,
   stageLabel,
 }: ResultCardProps) {
+  const isByeMatch = awayTeam === null && match.away_team_id === null
   const homeRaw = match.home_score ?? 0
   const awayRaw = match.away_score ?? 0
-  const forfeit = forfeitSide(match)
+  const forfeit = isByeMatch ? { side: null, reason: null } : forfeitSide(match)
   const isForfeit = forfeit.side !== null
   const homeAdjusted = isForfeit ? homeRaw : homeRaw - 2 * match.home_late_minutes
   const awayAdjusted = isForfeit ? awayRaw : awayRaw - 2 * match.away_late_minutes
@@ -99,7 +100,12 @@ export default function ResultCard({
     <article className="overflow-hidden rounded-xl border border-zinc-100 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
       {/* Status + meta bar */}
       <div className="flex items-center gap-2 border-b border-zinc-100 bg-zinc-50/80 px-4 py-1.5 text-xs font-medium text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-400">
-        {isForfeit ? (
+        {isByeMatch ? (
+          <span className="inline-flex items-center gap-1 font-semibold text-zinc-500 dark:text-zinc-400">
+            <span className="h-1.5 w-1.5 rounded-full bg-zinc-400" />
+            Bye
+          </span>
+        ) : isForfeit ? (
           <span className="inline-flex items-center gap-1 font-semibold text-red-600 dark:text-red-400">
             <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
             Forfeit
@@ -153,32 +159,43 @@ export default function ResultCard({
         </div>
 
         {/* Away row */}
-        <div className="flex items-center gap-3 py-2.5">
-          <TeamLogo team={awayTeam} size="sm" />
-          <span
-            className={`flex-1 truncate text-sm ${awayWon ? 'font-bold text-zinc-900 dark:text-zinc-50' : 'font-medium text-zinc-500 dark:text-zinc-400'}`}
-            title={awayTeam.name}
-          >
-            {awayTeam.name}
-          </span>
-          <div className="flex shrink-0 items-center gap-2">
-            <PointsChip points={points.away} />
-            {awayLateApplied && (
-              <span className="text-xs tabular-nums text-zinc-300 line-through dark:text-zinc-700">
-                {awayRaw}
-              </span>
-            )}
-            <span
-              className={`w-7 text-right text-xl font-extrabold tabular-nums ${awayWon ? 'text-zinc-900 dark:text-zinc-50' : 'text-zinc-400 dark:text-zinc-600'}`}
-            >
-              {awayAdjusted}
+        {isByeMatch ? (
+          <div className="flex items-center gap-3 py-2.5">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-[9px] font-black text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500">
+              —
+            </span>
+            <span className="flex-1 italic text-sm text-zinc-400 dark:text-zinc-500">
+              Bye — auto advanced
             </span>
           </div>
-        </div>
+        ) : (
+          <div className="flex items-center gap-3 py-2.5">
+            <TeamLogo team={awayTeam!} size="sm" />
+            <span
+              className={`flex-1 truncate text-sm ${awayWon ? 'font-bold text-zinc-900 dark:text-zinc-50' : 'font-medium text-zinc-500 dark:text-zinc-400'}`}
+              title={awayTeam!.name}
+            >
+              {awayTeam!.name}
+            </span>
+            <div className="flex shrink-0 items-center gap-2">
+              <PointsChip points={points.away} />
+              {awayLateApplied && (
+                <span className="text-xs tabular-nums text-zinc-300 line-through dark:text-zinc-700">
+                  {awayRaw}
+                </span>
+              )}
+              <span
+                className={`w-7 text-right text-xl font-extrabold tabular-nums ${awayWon ? 'text-zinc-900 dark:text-zinc-50' : 'text-zinc-400 dark:text-zinc-600'}`}
+              >
+                {awayAdjusted}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Penalty badges — only shown when relevant */}
-      {hasPenalties && (
+      {/* Penalty badges — only shown when relevant (never for bye matches) */}
+      {!isByeMatch && hasPenalties && (
         <div className="space-y-1 border-t border-zinc-100 px-4 pb-3 pt-2 dark:border-zinc-800">
           <PenaltyRow
             lateMinutes={match.home_late_minutes}

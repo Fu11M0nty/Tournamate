@@ -311,12 +311,18 @@ export async function generateStructureFixtures(
     poolTeamsByPoolId.set(poolTeam.pool_id, list)
   }
 
+  function matchAwayKey(match: Match): string {
+    if (match.away_team_id) return match.away_team_id
+    if (match.away_slot_id) return `slot:${match.away_slot_id}`
+    return 'bye'
+  }
+
   const existingPairs = new Set(
     existingMatches.map((match) =>
       [
         match.phase_element_id ?? 'none',
         match.home_team_id ?? `slot:${match.home_slot_id}`,
-        match.away_team_id ?? `slot:${match.away_slot_id}`,
+        matchAwayKey(match),
       ].join('|')
     )
   )
@@ -324,7 +330,7 @@ export async function generateStructureFixtures(
     existingMatches.map((match) =>
       [
         match.phase_element_id ?? 'none',
-        match.away_team_id ?? `slot:${match.away_slot_id}`,
+        matchAwayKey(match),
         match.home_team_id ?? `slot:${match.home_slot_id}`,
       ].join('|')
     )
@@ -363,7 +369,43 @@ export async function generateStructureFixtures(
 
     const entrants = slotEntrants.length > 0 ? slotEntrants : teamIds
 
-    if (entrants.length < 2) continue
+    if (entrants.length < 2) {
+      // Bye match: single seeded team auto-advances; create a completed match with no opponent.
+      const allPoolSlots = slotsByElementId.get(element.id) ?? []
+      const hasByeSlot = allPoolSlots.some((slot) => slot.slot_type === 'bye')
+      const poolPhase = phaseById.get(pool.phase_id)
+      const isKnockout =
+        poolPhase?.phase_type === 'knockout' ||
+        element.element_type === 'single_match' ||
+        element.element_type === 'bracket'
+
+      if (hasByeSlot && entrants.length === 1 && isKnockout) {
+        const home = entrants[0]
+        const homeIdentity = home.teamId ?? `slot:${home.slotId}`
+        const byeKey = [element.id, homeIdentity, 'bye'].join('|')
+        if (!existingPairs.has(byeKey)) {
+          toInsert.push({
+            age_group_id: ageGroupId,
+            phase_id: pool.phase_id,
+            pool_id: pool.id,
+            phase_element_id: element.id,
+            competition_date_id: competitionDateId,
+            // Use team-mode when resolved, slot-mode when not — never both, to satisfy the constraint.
+            home_team_id: home.teamId ?? null,
+            away_team_id: null,
+            home_slot_id: home.teamId ? null : home.slotId,
+            away_slot_id: null,
+            court: null,
+            kickoff_time: placeholder,
+            status: 'completed',
+            duration_minutes: totalMin,
+            is_planned: false,
+            round_number: 1,
+          })
+        }
+      }
+      continue
+    }
 
     const phase = phaseById.get(pool.phase_id)
     const leagueRepeatCount =
@@ -552,28 +594,31 @@ export async function restoreTeam(
   const cands = (candidates ?? []) as {
     id: string
     home_team_id: string
-    away_team_id: string
+    away_team_id: string | null
   }[]
   if (cands.length === 0) return { team: 1, matches: 0 }
 
   const otherIds = Array.from(
     new Set(
-      cands.map((m) => (m.home_team_id === teamId ? m.away_team_id : m.home_team_id))
+      cands.flatMap((m) => {
+        const otherId = m.home_team_id === teamId ? m.away_team_id : m.home_team_id
+        return otherId ? [otherId] : []
+      })
     )
   )
-  const { data: activeOthers } = await supabase
-    .from('teams')
-    .select('id')
-    .in('id', otherIds)
-    .is('deleted_at', null)
+  const { data: activeOthers } = otherIds.length > 0
+    ? await supabase.from('teams').select('id').in('id', otherIds).is('deleted_at', null)
+    : { data: [] }
   const activeSet = new Set(
     ((activeOthers ?? []) as { id: string }[]).map((r) => r.id)
   )
 
   const restoreIds = cands
-    .filter((m) =>
-      activeSet.has(m.home_team_id === teamId ? m.away_team_id : m.home_team_id)
-    )
+    .filter((m) => {
+      const otherId = m.home_team_id === teamId ? m.away_team_id : m.home_team_id
+      // Bye matches (null away_team_id) are always restored with the home team.
+      return otherId === null || activeSet.has(otherId)
+    })
     .map((m) => m.id)
 
   if (restoreIds.length === 0) return { team: 1, matches: 0 }

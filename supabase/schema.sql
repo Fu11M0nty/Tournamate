@@ -471,6 +471,13 @@ create table matches (
       and away_slot_id is not null
       and home_slot_id <> away_slot_id
     )
+    or (
+      -- Bye match: single team auto-advances, no opponent
+      home_team_id is not null
+      and away_team_id is null
+      and home_slot_id is null
+      and away_slot_id is null
+    )
   ),
   check (status in ('scheduled', 'completed')),
   check (home_late_minutes >= 0),

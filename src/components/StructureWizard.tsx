@@ -31,6 +31,7 @@ interface WizardState {
   options: FormatBuilderOptions
   teamNames: string
   usePlaceholders: boolean
+  byeSelections: string[]
 }
 
 type WizardAction =
@@ -39,13 +40,13 @@ type WizardAction =
   | { type: 'SET_TEAM_NAMES'; names: string }
   | { type: 'SET_USE_PLACEHOLDERS'; value: boolean }
   | { type: 'SET_TEAM_COUNT'; count: number }
-  | { type: 'NEXT_STEP' }
-  | { type: 'PREV_STEP' }
+  | { type: 'SET_BYE_SELECTIONS'; selections: string[] }
+  | { type: 'GO_TO_STEP'; step: WizardStep }
 
 function reducer(state: WizardState, action: WizardAction): WizardState {
   switch (action.type) {
     case 'SET_BUILDER':
-      return { ...state, builderId: action.builderId, options: action.defaultOptions }
+      return { ...state, builderId: action.builderId, options: action.defaultOptions, byeSelections: [] }
     case 'SET_OPTIONS':
       return { ...state, options: { ...state.options, ...action.patch } }
     case 'SET_TEAM_NAMES':
@@ -53,17 +54,17 @@ function reducer(state: WizardState, action: WizardAction): WizardState {
     case 'SET_USE_PLACEHOLDERS':
       return { ...state, usePlaceholders: action.value }
     case 'SET_TEAM_COUNT':
-      return { ...state, options: { ...state.options, expectedTeamCount: action.count } }
-    case 'NEXT_STEP':
-      return { ...state, step: Math.min(4, state.step + 1) as WizardStep }
-    case 'PREV_STEP':
-      return { ...state, step: Math.max(1, state.step - 1) as WizardStep }
+      // Keep teamCount (bracket structure) and expectedTeamCount (placeholder count) in sync.
+      // Clear bye selections whenever team count changes (selection may be stale).
+      return { ...state, options: { ...state.options, teamCount: action.count, expectedTeamCount: action.count }, byeSelections: [] }
+    case 'SET_BYE_SELECTIONS':
+      return { ...state, byeSelections: action.selections }
+    case 'GO_TO_STEP':
+      return { ...state, step: action.step }
     default:
       return state
   }
 }
-
-const STEP_LABELS = ['Template', 'Configure', 'Teams', 'Review']
 
 export default function StructureWizard({
   division,
@@ -82,21 +83,47 @@ export default function StructureWizard({
     options: {},
     teamNames: existingTeams.map((t) => t.name).join('\n'),
     usePlaceholders: existingTeams.length === 0,
+    byeSelections: [],
   })
 
   const selectedBuilder = FORMAT_BUILDERS.find((b) => b.id === state.builderId) ?? null
 
+  // When the builder's only configurable field is teamCount (e.g. Knockout), there's nothing
+  // to show on a dedicated Configure step — skip it and fold the count into the Teams step.
+  const shouldSkipConfigure = Boolean(
+    selectedBuilder?.configurable &&
+    Object.keys(selectedBuilder.configurable).length === 1 &&
+    'teamCount' in selectedBuilder.configurable
+  )
+  const effectiveSteps: WizardStep[] = shouldSkipConfigure ? [1, 3, 4] : [1, 2, 3, 4]
+  const stepLabels = shouldSkipConfigure
+    ? ['Template', 'Teams', 'Review']
+    : ['Template', 'Configure', 'Teams', 'Review']
+
+  function goNext() {
+    const idx = effectiveSteps.indexOf(state.step)
+    if (idx < effectiveSteps.length - 1) {
+      dispatch({ type: 'GO_TO_STEP', step: effectiveSteps[idx + 1] })
+    }
+  }
+  function goPrev() {
+    const idx = effectiveSteps.indexOf(state.step)
+    if (idx > 0) {
+      dispatch({ type: 'GO_TO_STEP', step: effectiveSteps[idx - 1] })
+    }
+  }
+
   const resolvedTeamNames: string[] = useMemo(() => {
     if (existingTeams.length > 0) return existingTeams.map((t) => t.name)
     if (state.usePlaceholders) {
-      const count = state.options.expectedTeamCount ?? 8
+      const count = state.options.expectedTeamCount ?? state.options.teamCount ?? 8
       return Array.from({ length: count }, (_, i) => `Team ${i + 1}`)
     }
     return state.teamNames
       .split('\n')
       .map((s) => s.trim())
       .filter(Boolean)
-  }, [existingTeams, state.usePlaceholders, state.options.expectedTeamCount, state.teamNames])
+  }, [existingTeams, state.usePlaceholders, state.options.expectedTeamCount, state.options.teamCount, state.teamNames])
 
   async function handleConfirm() {
     if (!state.builderId) return
@@ -104,6 +131,8 @@ export default function StructureWizard({
     setApplyError(null)
 
     try {
+      let resolvedByeTeamIds: string[] = []
+
       // Create named teams first if user entered them and none exist yet
       if (!state.usePlaceholders && existingTeams.length === 0) {
         const validNames = state.teamNames
@@ -111,7 +140,7 @@ export default function StructureWizard({
           .map((s) => s.trim())
           .filter(Boolean)
         if (validNames.length > 0) {
-          const { error: teamError } = await supabase.from('teams').insert(
+          const { data: createdTeams, error: teamError } = await supabase.from('teams').insert(
             validNames.map((name, index) => ({
               age_group_id: division.id,
               name,
@@ -120,20 +149,29 @@ export default function StructureWizard({
               logo_url: null,
               display_order: index + 1,
             }))
-          )
+          ).select('id, name')
           if (teamError) {
             setApplyError(`Failed to create teams: ${teamError.message}`)
             setApplying(false)
             return
           }
+          // Resolve bye selections (team names) → team IDs from just-created rows.
+          if (state.byeSelections.length > 0 && createdTeams) {
+            resolvedByeTeamIds = state.byeSelections
+              .map((name) => (createdTeams as { id: string; name: string }[]).find((t) => t.name === name)?.id)
+              .filter((id): id is string => Boolean(id))
+          }
         }
+      } else if (existingTeams.length > 0 && state.byeSelections.length > 0) {
+        // Existing teams: bye selections are already team IDs.
+        resolvedByeTeamIds = state.byeSelections
       }
 
       const result = await applyFormatBuilder(
         supabase as Parameters<typeof applyFormatBuilder>[0],
         division,
         state.builderId,
-        state.options
+        { ...state.options, byeTeamIds: resolvedByeTeamIds }
       )
 
       if (result.error) {
@@ -170,10 +208,10 @@ export default function StructureWizard({
     <div className="space-y-5">
       {/* Step indicator */}
       <nav aria-label="Setup steps" className="flex flex-wrap items-center gap-1.5">
-        {STEP_LABELS.map((label, index) => {
-          const stepNum = (index + 1) as WizardStep
-          const isActive = stepNum === state.step
-          const isDone = stepNum < state.step
+        {effectiveSteps.map((internalStep, index) => {
+          const label = stepLabels[index]
+          const isActive = internalStep === state.step
+          const isDone = internalStep < state.step
           return (
             <div key={label} className="flex items-center gap-1.5">
               {index > 0 && (
@@ -190,7 +228,7 @@ export default function StructureWizard({
                         : 'flex h-5 w-5 items-center justify-center rounded-full bg-zinc-200 text-[10px] font-bold text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400'
                   }
                 >
-                  {isDone ? '✓' : stepNum}
+                  {isDone ? '✓' : index + 1}
                 </span>
                 <span
                   className={
@@ -223,7 +261,7 @@ export default function StructureWizard({
               })
             }
           }}
-          onNext={() => dispatch({ type: 'NEXT_STEP' })}
+          onNext={goNext}
         />
       )}
 
@@ -233,8 +271,8 @@ export default function StructureWizard({
           options={state.options}
           teamCount={teamCountForStep2}
           onChange={(patch) => dispatch({ type: 'SET_OPTIONS', patch })}
-          onBack={() => dispatch({ type: 'PREV_STEP' })}
-          onNext={() => dispatch({ type: 'NEXT_STEP' })}
+          onBack={goPrev}
+          onNext={goNext}
         />
       )}
 
@@ -245,11 +283,13 @@ export default function StructureWizard({
           existingTeams={existingTeams}
           teamNames={state.teamNames}
           usePlaceholders={state.usePlaceholders}
+          byeSelections={state.byeSelections}
           onChangeNames={(names) => dispatch({ type: 'SET_TEAM_NAMES', names })}
           onChangeUsePlaceholders={(value) => dispatch({ type: 'SET_USE_PLACEHOLDERS', value })}
           onChangeTeamCount={(count) => dispatch({ type: 'SET_TEAM_COUNT', count })}
-          onBack={() => dispatch({ type: 'PREV_STEP' })}
-          onNext={() => dispatch({ type: 'NEXT_STEP' })}
+          onChangeByeSelections={(selections) => dispatch({ type: 'SET_BYE_SELECTIONS', selections })}
+          onBack={goPrev}
+          onNext={goNext}
         />
       )}
 
@@ -262,7 +302,7 @@ export default function StructureWizard({
           mode={mode}
           applying={applying}
           applyError={applyError}
-          onBack={() => dispatch({ type: 'PREV_STEP' })}
+          onBack={goPrev}
           onConfirm={handleConfirm}
           onCancel={onCancel}
         />

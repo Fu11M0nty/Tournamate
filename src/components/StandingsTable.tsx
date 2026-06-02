@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import TeamLogo from './TeamLogo'
 import type { ScoringSystem, StandingRow } from '@/lib/types'
 
@@ -6,6 +7,8 @@ interface StandingsTableProps {
   allComplete: boolean
   scoringSystem: ScoringSystem
   showRules?: boolean
+  currentTeamId?: string | null
+  hrefForTeam?: (teamId: string | null) => string
 }
 
 const TIE_BREAKER_LABELS: Record<string, string> = {
@@ -23,6 +26,8 @@ export default function StandingsTable({
   allComplete,
   scoringSystem,
   showRules = true,
+  currentTeamId = null,
+  hrefForTeam,
 }: StandingsTableProps) {
   if (standings.length === 0) {
     return (
@@ -53,16 +58,26 @@ export default function StandingsTable({
           <tbody>
             {standings.map((row, idx) => {
               const isLeader = row.position === 1
+              const isSelected = row.team.id === currentTeamId
               const stripe =
                 idx % 2 === 0
                   ? 'bg-white dark:bg-zinc-950'
                   : 'bg-zinc-50/60 dark:bg-zinc-900/30'
-              const rowBg = isLeader ? 'bg-tm-orange/8 dark:bg-tm-orange/10' : stripe
+              const rowBg = isSelected
+                ? 'bg-tm-sky/15 dark:bg-tm-sky/10'
+                : isLeader
+                  ? 'bg-tm-orange/8 dark:bg-tm-orange/10'
+                  : stripe
               const positionColor = isLeader ? 'text-tm-orange font-black' : 'text-zinc-400 font-semibold'
+              const teamName = (
+                <span className="font-semibold text-zinc-900 dark:text-zinc-100">
+                  {row.team.name}
+                </span>
+              )
               return (
                 <tr
                   key={row.team.id}
-                  className={`${rowBg} border-b border-zinc-100 last:border-b-0 dark:border-zinc-800/60 ${isLeader ? 'border-l-2 border-l-tm-orange' : ''}`}
+                  className={`${rowBg} border-b border-zinc-100 last:border-b-0 dark:border-zinc-800/60 ${isSelected ? 'border-l-2 border-l-tm-sky' : isLeader ? 'border-l-2 border-l-tm-orange' : ''}`}
                 >
                   <td className="py-3 pl-4 pr-2">
                     <span className={`text-sm tabular-nums ${positionColor}`}>
@@ -72,9 +87,18 @@ export default function StandingsTable({
                   <td className="py-3 pr-2">
                     <div className="flex items-center gap-2.5">
                       <TeamLogo team={row.team} size="sm" />
-                      <span className="font-semibold text-zinc-900 dark:text-zinc-100">
-                        {row.team.name}
-                      </span>
+                      {hrefForTeam ? (
+                        <Link
+                          href={isSelected ? hrefForTeam(null) : hrefForTeam(row.team.id)}
+                          scroll={false}
+                          className="rounded-sm underline-offset-2 hover:text-tm-orange hover:underline focus:outline-none focus:ring-2 focus:ring-tm-orange/40"
+                          aria-current={isSelected ? 'true' : undefined}
+                        >
+                          {teamName}
+                        </Link>
+                      ) : (
+                        teamName
+                      )}
                       {isLeader && allComplete && (
                         <span aria-label="Group winner" title="Group winner">🏆</span>
                       )}

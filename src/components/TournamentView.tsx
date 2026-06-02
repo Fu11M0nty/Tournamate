@@ -7,14 +7,14 @@ import {
 } from '@/lib/scoring'
 import { labelForLegacyDay } from '@/lib/competitionDates'
 import { formatKickoffTime } from '@/lib/time'
-import DayTabs from './DayTabs'
-import DivisionTabs from './DivisionTabs'
+import Link from 'next/link'
 import PhaseTabs from './PhaseTabs'
 import StandingsTable from './StandingsTable'
 import ResultCard from './ResultCard'
 import FixtureCard from './FixtureCard'
 import TeamFilter from './TeamFilter'
 import PrintButton from './PrintButton'
+import PublicBracketView from './PublicBracketView'
 import type { Division, Day, ElementSlot, Match, Pool, ScoringSystem, StandingRow, Team, Tournament } from '@/lib/types'
 import { matchStageRoundLabel } from '@/lib/matchLabel'
 
@@ -47,12 +47,17 @@ type PoolWithStandings = {
   allComplete: boolean
 }
 
+const PUBLIC_TABS = [
+  { id: 'info', label: 'Info' },
+  { id: 'teams', label: 'Teams' },
+  { id: 'standings', label: 'Standings' },
+  { id: 'schedule', label: 'Schedule' },
+] as const
+
 export default function TournamentView({
   tournament,
   day,
   currentGroup,
-  saturdayGroups,
-  sundayGroups,
   teams,
   matches,
   slots = [],
@@ -62,6 +67,15 @@ export default function TournamentView({
   const phases = sortedPhasesForDivision(currentGroup)
   const currentPhase = phaseForDivision(currentGroup, phaseSlug)
   const currentPhaseSlug = currentPhase?.slug ?? null
+  const isKnockoutPhase = currentPhase?.phase_type === 'knockout'
+  const phasesWithMatches = phases.filter((phase) => matches.some((match) => match.phase_id === phase.id))
+  const navigablePhases = phasesWithMatches.length > 0 ? phasesWithMatches : phases
+  const isAllKnockoutFormat =
+    navigablePhases.length > 0 &&
+    navigablePhases.every((phase) => phase.phase_type === 'knockout')
+  const phaseHasStandings = currentPhase ? currentPhase.standings_mode === 'visible' && !isKnockoutPhase : true
+  const supportsInlineTeamFilter = phaseHasStandings
+  const supportsStandaloneTeamFilter = currentPhase?.standings_mode === 'none' && !isKnockoutPhase
   const sys = effectiveScoringSystemForPhase(currentGroup, currentPhase) || FALLBACK_SCORING
   const phaseMatches = matchesForPhase(currentPhase, matches)
   const standingsMatches =
@@ -97,7 +111,9 @@ export default function TournamentView({
   }
 
   const activeTeamId =
-    teamFilterId && teamById.has(teamFilterId) ? teamFilterId : null
+    teamFilterId && teamById.has(teamFilterId) && (supportsInlineTeamFilter || supportsStandaloneTeamFilter)
+      ? teamFilterId
+      : null
 
   const matchesForLists = activeTeamId
     ? phaseMatches.filter(
@@ -142,8 +158,16 @@ export default function TournamentView({
     timeZone: 'Europe/London',
   })
 
-  const divisionsForDay = day === 'saturday' ? saturdayGroups : sundayGroups
   const dayLabel = labelForLegacyDay(tournament, day)
+  const baseDivisionPath = `/${tournament.slug}/${day}/${currentGroup.slug}`
+
+  function hrefForTeam(teamId: string | null) {
+    const params = new URLSearchParams()
+    if (currentPhaseSlug) params.set('phase', currentPhaseSlug)
+    if (teamId) params.set('team', teamId)
+    const query = params.toString()
+    return query ? `${baseDivisionPath}?${query}` : baseDivisionPath
+  }
 
   const currentPools =
     currentPhase?.pools
@@ -179,7 +203,10 @@ export default function TournamentView({
     : []
 
   return (
-    <main data-pdf-root className="mx-auto w-full max-w-5xl pb-16">
+    <main
+      data-pdf-root
+      className={`mx-auto w-full pb-16 ${isKnockoutPhase ? 'max-w-[1800px]' : 'max-w-5xl'}`}
+    >
       {/* Hero */}
       <section
         data-pdf-block
@@ -273,32 +300,48 @@ export default function TournamentView({
         </div>
       </section>
 
-      {/* Navigation */}
+      {/* Tournament sections */}
       <div data-print-hide className="bg-white shadow-sm dark:bg-zinc-950">
-        <DayTabs
-          tournamentSlug={tournament.slug}
-          tournament={tournament}
-          days={[saturdayGroups, sundayGroups]}
-          currentDay={day}
-        />
-        <DivisionTabs
-          tournamentSlug={tournament.slug}
-          divisions={divisionsForDay}
-          currentSlug={currentGroup.slug}
-          day={day}
-        />
-        <PhaseTabs
-          tournamentSlug={tournament.slug}
-          day={day}
-          divisionSlug={currentGroup.slug}
-          phases={phases}
-          currentSlug={currentPhaseSlug}
-          teamFilterId={activeTeamId}
-        />
+        <nav
+          aria-label="Tournament sections"
+          className="border-b border-zinc-200 bg-white/95 px-4 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95 sm:px-6"
+        >
+          <ul className="-mx-1 flex overflow-x-auto py-2">
+            {PUBLIC_TABS.map((tab) => {
+              const active = tab.id === 'standings'
+              return (
+                <li key={tab.id} className="shrink-0 px-1">
+                  <Link
+                    href={`/${tournament.slug}?tab=${tab.id}`}
+                    scroll={false}
+                    aria-current={active ? 'page' : undefined}
+                    className={
+                      active
+                        ? 'inline-flex h-10 items-center rounded-full bg-tm-orange px-4 text-xs font-black uppercase tracking-wider text-white shadow-sm'
+                        : 'inline-flex h-10 items-center rounded-full px-4 text-xs font-bold uppercase tracking-wider text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-200'
+                    }
+                  >
+                    {tab.label}
+                  </Link>
+                </li>
+              )
+            })}
+          </ul>
+        </nav>
+        {!isAllKnockoutFormat && (
+          <PhaseTabs
+            tournamentSlug={tournament.slug}
+            day={day}
+            divisionSlug={currentGroup.slug}
+            phases={navigablePhases}
+            currentSlug={currentPhaseSlug}
+            teamFilterId={activeTeamId}
+          />
+        )}
       </div>
 
       {/* Standings */}
-      {currentPhase?.standings_mode !== 'none' && (
+      {phaseHasStandings && (
         <section data-pdf-block aria-labelledby="standings-heading" className="px-4 pt-6 pb-8 sm:px-6">
           <h3
             id="standings-heading"
@@ -339,6 +382,8 @@ export default function TournamentView({
                         allComplete={poolComplete}
                         scoringSystem={sys}
                         showRules={index === poolStandings.length - 1}
+                        currentTeamId={activeTeamId}
+                        hrefForTeam={supportsInlineTeamFilter ? hrefForTeam : undefined}
                       />
                     )}
                   </div>
@@ -346,30 +391,56 @@ export default function TournamentView({
               })}
             </div>
           ) : (
-            <StandingsTable standings={standings} allComplete={allComplete} scoringSystem={sys} />
+            <StandingsTable
+              standings={standings}
+              allComplete={allComplete}
+              scoringSystem={sys}
+              currentTeamId={activeTeamId}
+              hrefForTeam={supportsInlineTeamFilter ? hrefForTeam : undefined}
+            />
           )}
         </section>
       )}
 
+      {isKnockoutPhase && (
+        <section data-pdf-block aria-labelledby="bracket-heading" className="px-4 pt-6 pb-8 sm:px-6">
+          <h3 id="bracket-heading" className="sr-only">
+            Bracket
+          </h3>
+          <PublicBracketView
+            phases={phases}
+            currentPhaseId={currentPhase?.id ?? null}
+            matches={matches.filter((match) => {
+              if (!match.phase_id) return phaseMatches.includes(match)
+              return phases.some((phase) => phase.phase_type === 'knockout' && phase.id === match.phase_id)
+            })}
+            teams={teams}
+            slots={slots}
+          />
+        </section>
+      )}
+
       {/* Team filter */}
-      <section
-        aria-labelledby="filter-heading"
-        data-print-hide
-        className="px-4 pb-6 sm:px-6"
-      >
-        <h3
-          id="filter-heading"
-          className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-zinc-400"
+      {supportsStandaloneTeamFilter && (
+        <section
+          aria-labelledby="filter-heading"
+          data-print-hide
+          className="px-4 pb-6 sm:px-6"
         >
-          Filter by team
-        </h3>
-        <TeamFilter
-          pathname={`/${tournament.slug}/${day}/${currentGroup.slug}`}
-          teams={teams}
-          currentTeamId={activeTeamId}
-          currentPhaseSlug={currentPhaseSlug}
-        />
-      </section>
+          <h3
+            id="filter-heading"
+            className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-zinc-400"
+          >
+            Filter by team
+          </h3>
+          <TeamFilter
+            pathname={baseDivisionPath}
+            teams={teams}
+            currentTeamId={activeTeamId}
+            currentPhaseSlug={currentPhaseSlug}
+          />
+        </section>
+      )}
 
       {/* Results */}
       <section aria-labelledby="results-heading" className="px-4 pb-8 sm:px-6">
@@ -387,9 +458,9 @@ export default function TournamentView({
         ) : (
           <ul className="space-y-2">
             {results.map((match) => {
-              const home = match.home_team_id ? teamById.get(match.home_team_id) : null
-              const away = match.away_team_id ? teamById.get(match.away_team_id) : null
-              if (!home || !away) return null
+              const home = match.home_team_id ? teamById.get(match.home_team_id) ?? null : null
+              const away = match.away_team_id ? teamById.get(match.away_team_id) ?? null : null
+              if (!home) return null
               return (
                 <li key={match.id} data-pdf-block>
                   <ResultCard

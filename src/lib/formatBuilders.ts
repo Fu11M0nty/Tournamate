@@ -24,6 +24,8 @@ interface PhaseTemplate {
   name: string
   phaseType: PhaseType
   standingsMode: StandingsMode
+  displayColumn?: number
+  yAlignNode?: string  // nodeId (phaseSlug:poolSlug) to align this phase's y-position with
   pools: PoolTemplate[]
 }
 
@@ -69,9 +71,24 @@ export interface FormatBuilderTemplate {
     playInTeams?: {
       label: string
     }
+    directToFinals?: {
+      label: string
+    }
+    teamCount?: {
+      label: string
+      min: number
+      max: number
+      defaultValue: number
+    }
     leagueRepeatCount?: {
       label: string
       defaultValue: 1 | 2
+    }
+    champGroupSize?: {
+      label: string
+      min: number
+      max: number
+      defaultValue: number
     }
     finalsStyle?: {
       label: string
@@ -97,6 +114,7 @@ interface ProgressionTemplate {
   isBestRank?: boolean       // cross-pool best-nth selection; fromPool is ignored
   bestRankCount?: number     // total BNT picks at this rank (e.g. 2 of 3 pools)
   bestRankCriteria?: string[] // tie-breaker ordering for BNT
+  showEdgeLabel?: boolean    // render Winner/Loser label on this edge in the diagram
 }
 
 export interface FormatBuilderOptions {
@@ -104,12 +122,15 @@ export interface FormatBuilderOptions {
   teamsPerPool?: number | null
   championshipRanks?: number[]
   plateRanks?: number[]
+  champGroupSize?: number      // max teams entering each championship/plate group (grading only)
   teamCount?: number
   expectedTeamCount?: number | null
   playInTeamIds?: string[]
+  byeTeamIds?: string[]
   leagueRepeatCount?: 1 | 2
   finalsStyle?: FinalsStyle
   placementStyle?: PlacementStyle
+  directToFinals?: boolean
   bestRankCriteria?: string[] // criteria order for best-nth-placed team tiebreaking
 }
 
@@ -148,7 +169,7 @@ export const FORMAT_BUILDERS: FormatBuilderTemplate[] = [
         defaultValue: 2,
       },
       teamsPerPool: {
-        min: 2,
+        min: 4,
         max: 20,
         defaultValue: null,
       },
@@ -180,7 +201,7 @@ export const FORMAT_BUILDERS: FormatBuilderTemplate[] = [
         defaultValue: 2,
       },
       teamsPerPool: {
-        min: 2,
+        min: 4,
         max: 20,
         defaultValue: 4,
       },
@@ -221,89 +242,16 @@ export const FORMAT_BUILDERS: FormatBuilderTemplate[] = [
     ],
   },
   {
-    id: 'basic-knockout',
-    name: 'Basic Knockout',
-    description: 'Last 16 bracket where winners progress to quarter-finals, semi-finals and final.',
-    teamSplit: 'seeded-pools',
-    configurable: {
-      teamsPerPool: {
-        min: 2,
-        max: 2,
-        defaultValue: 2,
-      },
-    },
-    phases: [
-      {
-        slug: 'last-16',
-        name: 'Last 16',
-        phaseType: 'knockout',
-        standingsMode: 'hidden',
-        pools: [
-          { slug: 'match-1', name: 'Last 16 Match 1' },
-          { slug: 'match-2', name: 'Last 16 Match 2' },
-          { slug: 'match-3', name: 'Last 16 Match 3' },
-          { slug: 'match-4', name: 'Last 16 Match 4' },
-          { slug: 'match-5', name: 'Last 16 Match 5' },
-          { slug: 'match-6', name: 'Last 16 Match 6' },
-          { slug: 'match-7', name: 'Last 16 Match 7' },
-          { slug: 'match-8', name: 'Last 16 Match 8' },
-        ],
-      },
-      {
-        slug: 'quarter-finals',
-        name: 'Quarter-finals',
-        phaseType: 'knockout',
-        standingsMode: 'hidden',
-        pools: [
-          { slug: 'match-1', name: 'Quarter-final 1' },
-          { slug: 'match-2', name: 'Quarter-final 2' },
-          { slug: 'match-3', name: 'Quarter-final 3' },
-          { slug: 'match-4', name: 'Quarter-final 4' },
-        ],
-      },
-      {
-        slug: 'semi-finals',
-        name: 'Semi-finals',
-        phaseType: 'knockout',
-        standingsMode: 'hidden',
-        pools: [
-          { slug: 'match-1', name: 'Semi-final 1' },
-          { slug: 'match-2', name: 'Semi-final 2' },
-        ],
-      },
-      {
-        slug: 'final',
-        name: 'Final',
-        phaseType: 'knockout',
-        standingsMode: 'hidden',
-        pools: [{ slug: 'match-1', name: 'Final', isDefault: true }],
-      },
-    ],
-    progressions: [
-      { fromPhase: 'last-16', fromPool: 'match-1', ranks: [1], sourceType: 'match_winner', toPhase: 'quarter-finals', toPool: 'match-1', startSlot: 1 },
-      { fromPhase: 'last-16', fromPool: 'match-2', ranks: [1], sourceType: 'match_winner', toPhase: 'quarter-finals', toPool: 'match-1', startSlot: 2 },
-      { fromPhase: 'last-16', fromPool: 'match-3', ranks: [1], sourceType: 'match_winner', toPhase: 'quarter-finals', toPool: 'match-2', startSlot: 1 },
-      { fromPhase: 'last-16', fromPool: 'match-4', ranks: [1], sourceType: 'match_winner', toPhase: 'quarter-finals', toPool: 'match-2', startSlot: 2 },
-      { fromPhase: 'last-16', fromPool: 'match-5', ranks: [1], sourceType: 'match_winner', toPhase: 'quarter-finals', toPool: 'match-3', startSlot: 1 },
-      { fromPhase: 'last-16', fromPool: 'match-6', ranks: [1], sourceType: 'match_winner', toPhase: 'quarter-finals', toPool: 'match-3', startSlot: 2 },
-      { fromPhase: 'last-16', fromPool: 'match-7', ranks: [1], sourceType: 'match_winner', toPhase: 'quarter-finals', toPool: 'match-4', startSlot: 1 },
-      { fromPhase: 'last-16', fromPool: 'match-8', ranks: [1], sourceType: 'match_winner', toPhase: 'quarter-finals', toPool: 'match-4', startSlot: 2 },
-      { fromPhase: 'quarter-finals', fromPool: 'match-1', ranks: [1], sourceType: 'match_winner', toPhase: 'semi-finals', toPool: 'match-1', startSlot: 1 },
-      { fromPhase: 'quarter-finals', fromPool: 'match-2', ranks: [1], sourceType: 'match_winner', toPhase: 'semi-finals', toPool: 'match-1', startSlot: 2 },
-      { fromPhase: 'quarter-finals', fromPool: 'match-3', ranks: [1], sourceType: 'match_winner', toPhase: 'semi-finals', toPool: 'match-2', startSlot: 1 },
-      { fromPhase: 'quarter-finals', fromPool: 'match-4', ranks: [1], sourceType: 'match_winner', toPhase: 'semi-finals', toPool: 'match-2', startSlot: 2 },
-      { fromPhase: 'semi-finals', fromPool: 'match-1', ranks: [1], sourceType: 'match_winner', toPhase: 'final', toPool: 'match-1', startSlot: 1 },
-      { fromPhase: 'semi-finals', fromPool: 'match-2', ranks: [1], sourceType: 'match_winner', toPhase: 'final', toPool: 'match-1', startSlot: 2 },
-    ],
-  },
-  {
     id: 'knockout-play-ins',
-    name: 'Knockout + Play-ins',
-    description: 'Builds the correct knockout bracket for awkward team counts, with preliminary play-in ties feeding the main bracket.',
+    name: 'Knockout',
+    description: 'Direct knockout bracket for any team count. Seeded teams receive a first-round bye when the count isn\'t a clean power-of-two.',
     teamSplit: 'seeded-pools',
     configurable: {
-      playInTeams: {
-        label: 'Teams entering preliminary / play-in ties',
+      teamCount: {
+        label: 'Number of teams',
+        min: 2,
+        max: 64,
+        defaultValue: 16,
       },
     },
     phases: [],
@@ -351,7 +299,7 @@ export const FORMAT_BUILDERS: FormatBuilderTemplate[] = [
   {
     id: 'grading-championship',
     name: 'Grading + Championship',
-    description: 'Four grading pools followed by championship and plate pools.',
+    description: 'Grading pools split into Championship and Plate groups, each with optional finals.',
     teamSplit: 'four-pools',
     configurable: {
       pools: {
@@ -362,7 +310,7 @@ export const FORMAT_BUILDERS: FormatBuilderTemplate[] = [
         defaultValue: 4,
       },
       teamsPerPool: {
-        min: 2,
+        min: 4,
         max: 20,
         defaultValue: 6,
       },
@@ -373,6 +321,19 @@ export const FORMAT_BUILDERS: FormatBuilderTemplate[] = [
       plateRanks: {
         label: 'Ranks to Plate',
         defaultValue: [3, 4],
+      },
+      champGroupSize: {
+        label: 'Championship & Plate group size',
+        min: 4,
+        max: 16,
+        defaultValue: 8,
+      },
+      finalsStyle: {
+        label: 'Finals format (Championship & Plate)',
+        defaultValue: 'none',
+      },
+      directToFinals: {
+        label: 'Skip group phases — qualify directly to finals',
       },
     },
     phases: [
@@ -402,16 +363,6 @@ export const FORMAT_BUILDERS: FormatBuilderTemplate[] = [
         standingsMode: 'visible',
         pools: [{ slug: 'default', name: 'Plate', isDefault: true }],
       },
-    ],
-    progressions: [
-      { fromPhase: 'grading', fromPool: 'pool-a', ranks: [1, 2], toPhase: 'championship', toPool: 'default', startSlot: 1 },
-      { fromPhase: 'grading', fromPool: 'pool-b', ranks: [1, 2], toPhase: 'championship', toPool: 'default', startSlot: 3 },
-      { fromPhase: 'grading', fromPool: 'pool-c', ranks: [1, 2], toPhase: 'championship', toPool: 'default', startSlot: 5 },
-      { fromPhase: 'grading', fromPool: 'pool-d', ranks: [1, 2], toPhase: 'championship', toPool: 'default', startSlot: 7 },
-      { fromPhase: 'grading', fromPool: 'pool-a', ranks: [3, 4], toPhase: 'plate', toPool: 'default', startSlot: 1 },
-      { fromPhase: 'grading', fromPool: 'pool-b', ranks: [3, 4], toPhase: 'plate', toPool: 'default', startSlot: 3 },
-      { fromPhase: 'grading', fromPool: 'pool-c', ranks: [3, 4], toPhase: 'plate', toPool: 'default', startSlot: 5 },
-      { fromPhase: 'grading', fromPool: 'pool-d', ranks: [3, 4], toPhase: 'plate', toPool: 'default', startSlot: 7 },
     ],
   },
   {
@@ -666,6 +617,7 @@ function buildTop4DoubleEliminationFromRankings(
       name: 'Preliminary Final',
       phaseType: 'knockout',
       standingsMode: 'hidden',
+      yAlignNode: 'major-minor-finals:minor-semi-final',
       pools: [{ slug: 'match-1', name: 'Preliminary Final', isDefault: true }],
     },
     {
@@ -673,6 +625,7 @@ function buildTop4DoubleEliminationFromRankings(
       name: 'Grand Final',
       phaseType: 'knockout',
       standingsMode: 'hidden',
+      yAlignNode: 'major-minor-finals:major-semi-final',
       pools: [{ slug: 'match-1', name: 'Grand Final', isDefault: true }],
     },
   ]
@@ -685,6 +638,7 @@ function buildTop4DoubleEliminationFromRankings(
       fromPool: 'major-semi-final',
       ranks: [1],
       sourceType: 'match_winner',
+      showEdgeLabel: true,
       toPhase: 'grand-final',
       toPool: 'match-1',
       startSlot: 1,
@@ -694,6 +648,7 @@ function buildTop4DoubleEliminationFromRankings(
       fromPool: 'major-semi-final',
       ranks: [1],
       sourceType: 'match_loser',
+      showEdgeLabel: true,
       toPhase: 'preliminary-final',
       toPool: 'match-1',
       startSlot: 1,
@@ -703,6 +658,7 @@ function buildTop4DoubleEliminationFromRankings(
       fromPool: 'minor-semi-final',
       ranks: [1],
       sourceType: 'match_winner',
+      showEdgeLabel: true,
       toPhase: 'preliminary-final',
       toPool: 'match-1',
       startSlot: 2,
@@ -712,6 +668,7 @@ function buildTop4DoubleEliminationFromRankings(
       fromPool: 'match-1',
       ranks: [1],
       sourceType: 'match_winner',
+      showEdgeLabel: true,
       toPhase: 'grand-final',
       toPool: 'match-1',
       startSlot: 2,
@@ -719,6 +676,280 @@ function buildTop4DoubleEliminationFromRankings(
   ]
 
   return { phases, progressions }
+}
+
+// Builds progressions from grading pools into a championship or plate group, applying BNT
+// when total qualifiers exceed the group size cap.
+function buildGradingGroupProgressions(
+  toPhase: string,
+  ranks: number[],
+  poolCount: number,
+  groupSize: number,
+  bntCriteria: string[]
+): ProgressionTemplate[] {
+  const totalQualifiers = poolCount * ranks.length
+  const progs: ProgressionTemplate[] = []
+
+  if (totalQualifiers <= groupSize) {
+    // All teams fit — pool-grouped slot order (preserves existing behaviour)
+    for (let poolIndex = 0; poolIndex < poolCount; poolIndex++) {
+      progs.push({
+        fromPhase: 'grading', fromPool: poolSlug(poolIndex),
+        ranks, toPhase, toPool: 'default',
+        startSlot: poolIndex * ranks.length + 1,
+      })
+    }
+    return progs
+  }
+
+  // More qualifiers than slots: deterministic full-rank rounds + BNT for the overflow rank
+  const effectiveSize = Math.min(groupSize, totalQualifiers)
+  const fullRanks = Math.floor(effectiveSize / poolCount)
+  const remainder = effectiveSize - fullRanks * poolCount
+
+  // All pools contribute fully for ranks[0..fullRanks-1]
+  for (let rankIdx = 0; rankIdx < fullRanks; rankIdx++) {
+    for (let poolIndex = 0; poolIndex < poolCount; poolIndex++) {
+      progs.push({
+        fromPhase: 'grading', fromPool: poolSlug(poolIndex),
+        ranks: [ranks[rankIdx]], toPhase, toPool: 'default',
+        startSlot: rankIdx * poolCount + poolIndex + 1,
+      })
+    }
+  }
+
+  // BNT: best `remainder` teams at ranks[fullRanks]
+  if (remainder > 0 && ranks.length > fullRanks) {
+    const bntRank = ranks[fullRanks]
+    for (let r = 0; r < remainder; r++) {
+      progs.push({
+        fromPhase: 'grading', fromPool: '__best_rank__',
+        ranks: [bntRank],
+        sourceType: 'best_rank' as const,
+        isBestRank: true,
+        bestRankCount: remainder,
+        bestRankCriteria: bntCriteria,
+        toPhase, toPool: 'default',
+        startSlot: fullRanks * poolCount + r + 1,
+      })
+    }
+  }
+
+  return progs
+}
+
+// Builds championship or plate finals phases seeded from a single group (group → finals).
+// prefix e.g. 'championship', displayName e.g. 'Championship'
+function buildGradingGroupFinalsPhases(
+  prefix: string,
+  displayName: string,
+  fromPhase: string,
+  style: FinalsStyle,
+  baseCol: number
+): { phases: PhaseTemplate[], progressions: ProgressionTemplate[] } {
+  const semisSlug = `${prefix}-semis`
+  const finalSlug = `${prefix}-final`
+
+  if (style === 'final_only') {
+    return {
+      phases: [{
+        slug: finalSlug, name: `${displayName} Final`,
+        phaseType: 'knockout', standingsMode: 'hidden', displayColumn: baseCol,
+        pools: [{ slug: 'match-1', name: 'Final', isDefault: true }],
+      }],
+      progressions: [
+        { fromPhase, fromPool: 'default', ranks: [1], toPhase: finalSlug, toPool: 'match-1', startSlot: 1 },
+        { fromPhase, fromPool: 'default', ranks: [2], toPhase: finalSlug, toPool: 'match-1', startSlot: 2 },
+      ],
+    }
+  }
+
+  if (style === 'top4_double_elimination') {
+    const majorMinorSlug = `${prefix}-major-minor`
+    const prelimSlug = `${prefix}-prelim-final`
+    const grandFinalSlug = `${prefix}-grand-final`
+    return {
+      phases: [
+        {
+          slug: majorMinorSlug, name: `${displayName} Major/Minor`,
+          phaseType: 'knockout', standingsMode: 'hidden', displayColumn: baseCol,
+          pools: [
+            { slug: 'major-semi-final', name: 'Major Semi-final' },
+            { slug: 'minor-semi-final', name: 'Minor Semi-final' },
+          ],
+        },
+        {
+          slug: prelimSlug, name: `${displayName} Prelim Final`,
+          phaseType: 'knockout', standingsMode: 'hidden', displayColumn: baseCol + 1,
+          yAlignNode: `${majorMinorSlug}:minor-semi-final`,
+          pools: [{ slug: 'match-1', name: 'Prelim Final', isDefault: true }],
+        },
+        {
+          slug: grandFinalSlug, name: `${displayName} Grand Final`,
+          phaseType: 'knockout', standingsMode: 'hidden', displayColumn: baseCol + 2,
+          yAlignNode: `${majorMinorSlug}:major-semi-final`,
+          pools: [{ slug: 'match-1', name: 'Grand Final', isDefault: true }],
+        },
+      ],
+      progressions: [
+        { fromPhase, fromPool: 'default', ranks: [1], toPhase: majorMinorSlug, toPool: 'major-semi-final', startSlot: 1 },
+        { fromPhase, fromPool: 'default', ranks: [2], toPhase: majorMinorSlug, toPool: 'major-semi-final', startSlot: 2 },
+        { fromPhase, fromPool: 'default', ranks: [3], toPhase: majorMinorSlug, toPool: 'minor-semi-final', startSlot: 1 },
+        { fromPhase, fromPool: 'default', ranks: [4], toPhase: majorMinorSlug, toPool: 'minor-semi-final', startSlot: 2 },
+        { fromPhase: majorMinorSlug, fromPool: 'major-semi-final', ranks: [1], sourceType: 'match_winner' as const, showEdgeLabel: true, toPhase: grandFinalSlug, toPool: 'match-1', startSlot: 1 },
+        { fromPhase: majorMinorSlug, fromPool: 'major-semi-final', ranks: [1], sourceType: 'match_loser' as const, showEdgeLabel: true, toPhase: prelimSlug, toPool: 'match-1', startSlot: 1 },
+        { fromPhase: majorMinorSlug, fromPool: 'minor-semi-final', ranks: [1], sourceType: 'match_winner' as const, showEdgeLabel: true, toPhase: prelimSlug, toPool: 'match-1', startSlot: 2 },
+        { fromPhase: prelimSlug, fromPool: 'match-1', ranks: [1], sourceType: 'match_winner' as const, showEdgeLabel: true, toPhase: grandFinalSlug, toPool: 'match-1', startSlot: 2 },
+      ],
+    }
+  }
+
+  if (style === 'semi_final_final') {
+    return {
+      phases: [
+        {
+          slug: semisSlug, name: `${displayName} Semi-finals`,
+          phaseType: 'knockout', standingsMode: 'hidden', displayColumn: baseCol,
+          pools: [{ slug: 'match-1', name: 'Semi-final 1' }, { slug: 'match-2', name: 'Semi-final 2' }],
+        },
+        {
+          slug: finalSlug, name: `${displayName} Final`,
+          phaseType: 'knockout', standingsMode: 'hidden', displayColumn: baseCol + 1,
+          pools: [{ slug: 'match-1', name: 'Final', isDefault: true }],
+        },
+      ],
+      progressions: [
+        { fromPhase, fromPool: 'default', ranks: [1], toPhase: semisSlug, toPool: 'match-1', startSlot: 1 },
+        { fromPhase, fromPool: 'default', ranks: [4], toPhase: semisSlug, toPool: 'match-1', startSlot: 2 },
+        { fromPhase, fromPool: 'default', ranks: [2], toPhase: semisSlug, toPool: 'match-2', startSlot: 1 },
+        { fromPhase, fromPool: 'default', ranks: [3], toPhase: semisSlug, toPool: 'match-2', startSlot: 2 },
+        { fromPhase: semisSlug, fromPool: 'match-1', ranks: [1], sourceType: 'match_winner' as const, toPhase: finalSlug, toPool: 'match-1', startSlot: 1 },
+        { fromPhase: semisSlug, fromPool: 'match-2', ranks: [1], sourceType: 'match_winner' as const, toPhase: finalSlug, toPool: 'match-1', startSlot: 2 },
+      ],
+    }
+  }
+
+  return { phases: [], progressions: [] }
+}
+
+// Builds championship or plate finals phases seeded pool-by-pool from grading (direct-to-finals).
+function buildDirectGradingFinalsPhases(
+  prefix: string,
+  displayName: string,
+  gradeRanks: number[],
+  poolCount: number,
+  style: FinalsStyle,
+  baseCol: number
+): { phases: PhaseTemplate[], progressions: ProgressionTemplate[] } {
+  const semisSlug = `${prefix}-semis`
+  const finalSlug = `${prefix}-final`
+
+  // Pool-by-pool seeding order: for each rank, iterate all pools.
+  const seedings: { fromPool: string; rank: number }[] = []
+  for (const rank of gradeRanks) {
+    for (let p = 0; p < poolCount; p++) {
+      seedings.push({ fromPool: poolSlug(p), rank })
+    }
+  }
+
+  // Slot assignment targets: [ { toPool, startSlot } ] indexed by seeding position.
+  type SlotTarget = { toPool: string; startSlot: number }
+  const sfTargets: SlotTarget[] = [
+    { toPool: 'match-1', startSlot: 1 }, { toPool: 'match-1', startSlot: 2 },
+    { toPool: 'match-2', startSlot: 1 }, { toPool: 'match-2', startSlot: 2 },
+  ]
+  const directTargets: SlotTarget[] = [
+    { toPool: 'match-1', startSlot: 1 }, { toPool: 'match-1', startSlot: 2 },
+    { toPool: 'match-2', startSlot: 1 }, { toPool: 'match-2', startSlot: 2 },
+  ]
+
+  if (style === 'final_only') {
+    const slots: SlotTarget[] = [{ toPool: 'match-1', startSlot: 1 }, { toPool: 'match-1', startSlot: 2 }]
+    return {
+      phases: [{
+        slug: finalSlug, name: `${displayName} Final`,
+        phaseType: 'knockout', standingsMode: 'hidden', displayColumn: baseCol,
+        pools: [{ slug: 'match-1', name: 'Final', isDefault: true }],
+      }],
+      progressions: seedings.slice(0, slots.length).map((s, i) => ({
+        fromPhase: 'grading', fromPool: s.fromPool, ranks: [s.rank],
+        toPhase: finalSlug, toPool: slots[i].toPool, startSlot: slots[i].startSlot,
+      })),
+    }
+  }
+
+  if (style === 'top4_double_elimination') {
+    const majorMinorSlug = `${prefix}-major-minor`
+    const prelimSlug = `${prefix}-prelim-final`
+    const grandFinalSlug = `${prefix}-grand-final`
+    const deSlots: SlotTarget[] = [
+      { toPool: 'major-semi-final', startSlot: 1 },
+      { toPool: 'major-semi-final', startSlot: 2 },
+      { toPool: 'minor-semi-final', startSlot: 1 },
+      { toPool: 'minor-semi-final', startSlot: 2 },
+    ]
+    return {
+      phases: [
+        {
+          slug: majorMinorSlug, name: `${displayName} Major/Minor`,
+          phaseType: 'knockout', standingsMode: 'hidden', displayColumn: baseCol,
+          pools: [
+            { slug: 'major-semi-final', name: 'Major Semi-final' },
+            { slug: 'minor-semi-final', name: 'Minor Semi-final' },
+          ],
+        },
+        {
+          slug: prelimSlug, name: `${displayName} Prelim Final`,
+          phaseType: 'knockout', standingsMode: 'hidden', displayColumn: baseCol + 1,
+          yAlignNode: `${majorMinorSlug}:minor-semi-final`,
+          pools: [{ slug: 'match-1', name: 'Prelim Final', isDefault: true }],
+        },
+        {
+          slug: grandFinalSlug, name: `${displayName} Grand Final`,
+          phaseType: 'knockout', standingsMode: 'hidden', displayColumn: baseCol + 2,
+          yAlignNode: `${majorMinorSlug}:major-semi-final`,
+          pools: [{ slug: 'match-1', name: 'Grand Final', isDefault: true }],
+        },
+      ],
+      progressions: [
+        ...seedings.slice(0, deSlots.length).map((s, i) => ({
+          fromPhase: 'grading', fromPool: s.fromPool, ranks: [s.rank],
+          toPhase: majorMinorSlug, toPool: deSlots[i].toPool, startSlot: deSlots[i].startSlot,
+        })),
+        { fromPhase: majorMinorSlug, fromPool: 'major-semi-final', ranks: [1], sourceType: 'match_winner' as const, showEdgeLabel: true, toPhase: grandFinalSlug, toPool: 'match-1', startSlot: 1 },
+        { fromPhase: majorMinorSlug, fromPool: 'major-semi-final', ranks: [1], sourceType: 'match_loser' as const, showEdgeLabel: true, toPhase: prelimSlug, toPool: 'match-1', startSlot: 1 },
+        { fromPhase: majorMinorSlug, fromPool: 'minor-semi-final', ranks: [1], sourceType: 'match_winner' as const, showEdgeLabel: true, toPhase: prelimSlug, toPool: 'match-1', startSlot: 2 },
+        { fromPhase: prelimSlug, fromPool: 'match-1', ranks: [1], sourceType: 'match_winner' as const, showEdgeLabel: true, toPhase: grandFinalSlug, toPool: 'match-1', startSlot: 2 },
+      ],
+    }
+  }
+
+  if (style === 'semi_final_final') {
+    return {
+      phases: [
+        {
+          slug: semisSlug, name: `${displayName} Semi-finals`,
+          phaseType: 'knockout', standingsMode: 'hidden', displayColumn: baseCol,
+          pools: [{ slug: 'match-1', name: 'Semi-final 1' }, { slug: 'match-2', name: 'Semi-final 2' }],
+        },
+        {
+          slug: finalSlug, name: `${displayName} Final`,
+          phaseType: 'knockout', standingsMode: 'hidden', displayColumn: baseCol + 1,
+          pools: [{ slug: 'match-1', name: 'Final', isDefault: true }],
+        },
+      ],
+      progressions: [
+        ...seedings.slice(0, sfTargets.length).map((s, i) => ({
+          fromPhase: 'grading', fromPool: s.fromPool, ranks: [s.rank],
+          toPhase: semisSlug, toPool: sfTargets[i].toPool, startSlot: sfTargets[i].startSlot,
+        })),
+        { fromPhase: semisSlug, fromPool: 'match-1', ranks: [1], sourceType: 'match_winner' as const, toPhase: finalSlug, toPool: 'match-1', startSlot: 1 },
+        { fromPhase: semisSlug, fromPool: 'match-2', ranks: [1], sourceType: 'match_winner' as const, toPhase: finalSlug, toPool: 'match-1', startSlot: 2 },
+      ],
+    }
+  }
+
+  return { phases: [], progressions: [] }
 }
 
 function finalsStylePhasesFromRankings(
@@ -735,10 +966,23 @@ function finalsStylePhasesFromRankings(
   return { phases: [], progressions: [] as ProgressionTemplate[] }
 }
 
-function previousPowerOfTwo(value: number) {
+function nextPowerOfTwo(value: number) {
   let power = 1
-  while (power * 2 <= value) power *= 2
+  while (power < value) power *= 2
   return power
+}
+
+function byeMatchPositionSet(firstRoundMatchCount: number, byeCount: number): Set<number> {
+  const positions = new Set<number>()
+  const oddCount = Math.ceil(firstRoundMatchCount / 2)
+  for (let i = 0; i < byeCount; i++) {
+    if (i < oddCount) {
+      positions.add(i * 2 + 1)
+    } else {
+      positions.add((i - oddCount) * 2 + 2)
+    }
+  }
+  return positions
 }
 
 function knockoutRoundName(entrants: number) {
@@ -755,37 +999,16 @@ function knockoutRoundSlug(entrants: number) {
   return `last-${entrants}`
 }
 
-function playInWinnerSlotOrders(bracketSize: number, playInMatchCount: number) {
-  const firstRoundMatchCount = bracketSize / 2
-  const firstSlotOrders = Array.from(
-    { length: Math.min(playInMatchCount, firstRoundMatchCount) },
-    (_, index) => index * 2 + 1
-  )
-  const secondSlotOrders = Array.from(
-    { length: Math.max(0, playInMatchCount - firstRoundMatchCount) },
-    (_, index) => index * 2 + 2
-  )
-
-  return [...firstSlotOrders, ...secondSlotOrders]
-}
 
 function buildDynamicKnockout(teamCount: number) {
   const count = Math.max(2, teamCount)
-  const bracketSize = previousPowerOfTwo(count)
-  const playInMatchCount = count - bracketSize
+  const bracketSize = nextPowerOfTwo(count)
+  const byeCount = bracketSize - count
   const phases: PhaseTemplate[] = []
   const progressions: ProgressionTemplate[] = []
 
-  if (playInMatchCount > 0) {
-    phases.push({
-      slug: 'preliminary',
-      name: 'Preliminary',
-      phaseType: 'knockout',
-      standingsMode: 'hidden',
-      pools: createMatchPoolTemplates(playInMatchCount, 'Play-in'),
-    })
-  }
-
+  // First round contains all teams; bye slots fill the gaps so the bracket is
+  // always a clean power-of-two without a separate preliminary phase.
   for (let entrants = bracketSize; entrants >= 2; entrants /= 2) {
     const name = knockoutRoundName(entrants)
     phases.push({
@@ -797,22 +1020,24 @@ function buildDynamicKnockout(teamCount: number) {
     })
   }
 
-  const mainPhaseSlug = knockoutRoundSlug(bracketSize)
-  const playInSlots = playInWinnerSlotOrders(bracketSize, playInMatchCount)
-  for (let playInIndex = 1; playInIndex <= playInMatchCount; playInIndex += 1) {
-    const targetSlotOrder = playInSlots[playInIndex - 1]
+  // Each first-round match winner progresses to the next round.
+  const firstRoundSlug = knockoutRoundSlug(bracketSize)
+  const secondRoundSlug = knockoutRoundSlug(bracketSize / 2)
+  const firstRoundMatchCount = bracketSize / 2
+  for (let matchIndex = 1; matchIndex <= firstRoundMatchCount; matchIndex += 1) {
     progressions.push({
-      fromPhase: 'preliminary',
-      fromPool: `match-${playInIndex}`,
+      fromPhase: firstRoundSlug,
+      fromPool: `match-${matchIndex}`,
       ranks: [1],
       sourceType: 'match_winner',
-      toPhase: mainPhaseSlug,
-      toPool: `match-${Math.ceil(targetSlotOrder / 2)}`,
-      startSlot: targetSlotOrder % 2 === 0 ? 2 : 1,
+      toPhase: secondRoundSlug,
+      toPool: `match-${Math.ceil(matchIndex / 2)}`,
+      startSlot: matchIndex % 2 === 0 ? 2 : 1,
     })
   }
 
-  for (let entrants = bracketSize; entrants > 2; entrants /= 2) {
+  // Subsequent rounds propagate winners forward to the final.
+  for (let entrants = bracketSize / 2; entrants > 2; entrants /= 2) {
     const fromPhase = knockoutRoundSlug(entrants)
     const toPhase = knockoutRoundSlug(entrants / 2)
     const matchCount = entrants / 2
@@ -829,64 +1054,24 @@ function buildDynamicKnockout(teamCount: number) {
     }
   }
 
-  return { bracketSize, playInMatchCount, phases, progressions }
+  return { bracketSize, byeCount, phases, progressions }
 }
 
-// Builds the (poolIdx, rankIdx) slot-fill order for QF matches so that:
-// - no same-pool matchup appears within a single QF match
-// - for even pool counts with 2 ranks: 1st-placed teams play 2nd-placed teams from a
-//   different pool, and the two bracket halves (QF1+QF2 → SF1, QF3+QF4 → SF2) are each
-//   drawn from a different pool pair → no same-pool matchup is possible before the final
-// - for odd pool counts (3, 5, …): circular seeding is used; a rare same-pool SF matchup
-//   is theoretically possible but every QF match is still cross-pool
-function buildQFCrossSeededAssignments(
-  resolvedPoolCount: number,
-  ranks: number[]          // e.g. [1, 2] — already resolved championship ranks
-): Array<{ poolIdx: number; rankIdx: number }> {
-  const M = ranks.length
-  const N = resolvedPoolCount
-  const result: Array<{ poolIdx: number; rankIdx: number }> = []
-
-  if (M >= 2 && N % 2 === 0) {
-    // Even N + ≥2 ranks → FIFA-style bracket seeding.
-    // Phase 1: one match per pool-pair (even pool rank0 vs odd pool rank1), all pairs interleaved.
-    for (let pairStart = 0; pairStart < N; pairStart += 2) {
-      result.push({ poolIdx: pairStart, rankIdx: 0 })
-      result.push({ poolIdx: pairStart + 1, rankIdx: 1 })
-    }
-    // Phase 2: reverse match per pool-pair (odd pool rank0 vs even pool rank1), all pairs.
-    for (let pairStart = 0; pairStart < N; pairStart += 2) {
-      result.push({ poolIdx: pairStart + 1, rankIdx: 0 })
-      result.push({ poolIdx: pairStart, rankIdx: 1 })
-    }
-    // Additional ranks (rank2, rank3, …) fill remaining slots rank-outer / pool-inner.
-    for (let rankIdx = 2; rankIdx < M; rankIdx++) {
-      for (let poolIdx = 0; poolIdx < N; poolIdx++) {
-        result.push({ poolIdx, rankIdx })
-      }
-    }
-    return result
-  }
-
-  if (M >= 2 && N % 2 !== 0) {
-    // Odd N + ≥2 ranks → circular seeding: pool k rank0 vs pool (k+1 mod N) rank1.
-    for (let k = 0; k < N; k++) {
-      result.push({ poolIdx: k, rankIdx: 0 })
-      result.push({ poolIdx: (k + 1) % N, rankIdx: 1 })
-    }
-    // Additional ranks fill rank-outer / pool-inner.
-    for (let rankIdx = 2; rankIdx < M; rankIdx++) {
-      for (let poolIdx = 0; poolIdx < N; poolIdx++) {
-        result.push({ poolIdx, rankIdx })
-      }
-    }
-    return result
-  }
-
-  // Single rank (M=1) or fallback: rank-outer / pool-inner.
-  for (let rankIdx = 0; rankIdx < M; rankIdx++) {
-    for (let poolIdx = 0; poolIdx < N; poolIdx++) {
-      result.push({ poolIdx, rankIdx })
+// Builds a bracket-seed order for QF slots: all rank-0 teams first, then rank-1, etc.
+// For odd pool counts a per-rank circular offset minimises same-pool matchups when
+// bracket seeding (seed[m] vs seed[qfCapacity-1-m]) is applied.
+// Even pool counts need no offset — the rank-grouped order already gives cross-pool pairs.
+function buildRankGroupedSeeds(
+  poolCount: number,
+  ranks: number[]
+): Array<{ poolIdx: number; rank: number }> {
+  const N = poolCount
+  const useOffset = N % 2 !== 0
+  const result: Array<{ poolIdx: number; rank: number }> = []
+  for (let rankIdx = 0; rankIdx < ranks.length; rankIdx++) {
+    const shift = useOffset ? rankIdx % N : 0
+    for (let i = 0; i < N; i++) {
+      result.push({ poolIdx: (i + shift) % N, rank: ranks[rankIdx] })
     }
   }
   return result
@@ -912,12 +1097,16 @@ export function defaultFormatBuilderOptions(
     teamsPerPool: builder.configurable?.teamsPerPool?.defaultValue,
     championshipRanks: builder.configurable?.championshipRanks?.defaultValue,
     plateRanks: builder.configurable?.plateRanks?.defaultValue,
+    champGroupSize: builder.configurable?.champGroupSize?.defaultValue,
+    teamCount: builder.configurable?.teamCount?.defaultValue,
     playInTeamIds: [],
+    byeTeamIds: [],
     expectedTeamCount: null,
     leagueRepeatCount: builder.configurable?.leagueRepeatCount?.defaultValue,
     finalsStyle: builder.configurable?.finalsStyle?.defaultValue,
     placementStyle: builder.configurable?.placementStyle?.defaultValue,
     bestRankCriteria: ['points', 'goal_difference', 'goals_for'],
+    directToFinals: false,
   }
 }
 
@@ -948,9 +1137,9 @@ export function resolveFormatBuilder(
     return {
       ...builder,
       description:
-        dynamic.playInMatchCount > 0
-          ? `${dynamic.playInMatchCount} preliminary play-in tie${dynamic.playInMatchCount === 1 ? '' : 's'} feed a ${dynamic.bracketSize}-team main knockout bracket.`
-          : `Clean ${dynamic.bracketSize}-team knockout bracket with no play-ins needed.`,
+        dynamic.byeCount > 0
+          ? `${dynamic.byeCount} seeded team${dynamic.byeCount === 1 ? '' : 's'} receive${dynamic.byeCount === 1 ? 's' : ''} a first-round bye in a ${dynamic.bracketSize}-team bracket.`
+          : `Clean ${dynamic.bracketSize}-team knockout bracket — every team plays from the first round.`,
       phases: dynamic.phases,
       progressions: dynamic.progressions,
     }
@@ -970,28 +1159,63 @@ export function resolveFormatBuilder(
   })
 
   if (builder.id === 'grading-championship' && resolvedPoolCount) {
-    const progressions: ProgressionTemplate[] = []
-    for (let poolIndex = 0; poolIndex < resolvedPoolCount; poolIndex += 1) {
-      progressions.push({
-        fromPhase: 'grading',
-        fromPool: poolSlug(poolIndex),
-        ranks: championshipRanks,
-        toPhase: 'championship',
-        toPool: 'default',
-        startSlot: poolIndex * championshipRanks.length + 1,
-      })
-      if (plateRanks.length > 0) {
-        progressions.push({
-          fromPhase: 'grading',
-          fromPool: poolSlug(poolIndex),
-          ranks: plateRanks,
-          toPhase: 'plate',
-          toPool: 'default',
-          startSlot: poolIndex * plateRanks.length + 1,
-        })
+    const useDirectToFinals =
+      options.directToFinals === true &&
+      resolvedPoolCount <= 4 &&
+      finalsStyle !== 'none'
+
+    const gradingPhase: PhaseTemplate = {
+      ...phases.find(p => p.slug === 'grading')!,
+      displayColumn: 0,
+    }
+
+    if (useDirectToFinals) {
+      // Skip group phases — pool-by-pool seeding directly into championship/plate finals.
+      const champFinals = buildDirectGradingFinalsPhases(
+        'championship', 'Championship', championshipRanks, resolvedPoolCount, finalsStyle, 1
+      )
+      const plateFinals = buildDirectGradingFinalsPhases(
+        'plate', 'Plate', plateRanks, resolvedPoolCount, finalsStyle, 1
+      )
+      return {
+        ...builder,
+        phases: [gradingPhase, ...champFinals.phases, ...plateFinals.phases],
+        progressions: [...champFinals.progressions, ...plateFinals.progressions],
       }
     }
-    return { ...builder, phases, progressions }
+
+    // Standard mode: grading → championship/plate groups → optional finals.
+    const champGroupPhase: PhaseTemplate = {
+      ...phases.find(p => p.slug === 'championship')!,
+      displayColumn: 1,
+    }
+    const plateGroupPhase: PhaseTemplate = {
+      ...phases.find(p => p.slug === 'plate')!,
+      displayColumn: 1,
+    }
+
+    const bntCriteria = options.bestRankCriteria ?? ['points', 'goal_difference', 'goals_for']
+    const champGroupSize = clamp(options.champGroupSize ?? 8, 4, 16)
+    const progressions: ProgressionTemplate[] = [
+      ...buildGradingGroupProgressions('championship', championshipRanks, resolvedPoolCount, champGroupSize, bntCriteria),
+      ...(plateRanks.length > 0 ? buildGradingGroupProgressions('plate', plateRanks, resolvedPoolCount, champGroupSize, bntCriteria) : []),
+    ]
+
+    if (finalsStyle !== 'none') {
+      const champFinals = buildGradingGroupFinalsPhases(
+        'championship', 'Championship', 'championship', finalsStyle, 2
+      )
+      const plateFinals = buildGradingGroupFinalsPhases(
+        'plate', 'Plate', 'plate', finalsStyle, 2
+      )
+      return {
+        ...builder,
+        phases: [gradingPhase, champGroupPhase, plateGroupPhase, ...champFinals.phases, ...plateFinals.phases],
+        progressions: [...progressions, ...champFinals.progressions, ...plateFinals.progressions],
+      }
+    }
+
+    return { ...builder, phases: [gradingPhase, champGroupPhase, plateGroupPhase], progressions }
   }
 
   if (builder.id === 'group-stage-finals' && resolvedPoolCount && championshipRanks.length > 0) {
@@ -1166,86 +1390,57 @@ export function resolveFormatBuilder(
 
       const qfCapacity = 8
       const progressions: ProgressionTemplate[] = []
-      let qfSlot = 1
+
+      // Helper: emit bracket-seeded QF progressions from a slotData array.
+      // seed[m] vs seed[qfCapacity-1-m] pairs highest seeds against lowest.
+      function emitQFProgressions(
+        slotData: Array<{ fromPool: string; rank: number; isBnt: boolean; bestRankCount?: number; bestRankCriteria?: string[] }>
+      ) {
+        const matchCount = qfCapacity / 2
+        for (let m = 0; m < matchCount; m++) {
+          const hi = slotData[m]!
+          const lo = slotData[qfCapacity - 1 - m]!
+          for (const [slot, entry] of [[1, hi], [2, lo]] as const) {
+            progressions.push({
+              fromPhase: 'group-stage',
+              fromPool: entry.fromPool,
+              ranks: [entry.rank],
+              ...(entry.isBnt ? { sourceType: 'best_rank' as const, isBestRank: true, bestRankCount: entry.bestRankCount ?? 1, bestRankCriteria: entry.bestRankCriteria } : {}),
+              toPhase: 'quarter-finals',
+              toPool: `match-${m + 1}`,
+              startSlot: slot,
+            })
+          }
+        }
+      }
 
       if (qualifierCount > qfCapacity) {
-        // More qualifiers than QF slots: deterministic rounds via cross-seeding + BNT for remainder.
-        // Bracket seeding (seed[m] vs seed[qfCapacity-1-m]) guarantees BNT never faces another BNT.
+        // More qualifiers than QF slots: deterministic rounds + BNT for the remainder.
         const fullRanks = Math.floor(qfCapacity / resolvedPoolCount)
         const remainder = qfCapacity % resolvedPoolCount
         const bestRankCriteria = options.bestRankCriteria ?? ['points', 'goal_difference', 'goals_for']
         const deterministicRanks = championshipRanks.slice(0, fullRanks)
-        const assignments = buildQFCrossSeededAssignments(resolvedPoolCount, deterministicRanks)
+        // Rank-grouped seeds: all 1sts, then all 2nds, etc. (with per-rank circular offset for odd N).
+        const deterministicSeeds = buildRankGroupedSeeds(resolvedPoolCount, deterministicRanks)
 
         if (remainder > 0 && championshipRanks.length > fullRanks) {
-          // BNT path: build entries list (deterministic first, BNT appended) then bracket-seed into QF.
+          // BNT path: deterministic seeds first, BNT appended → bracket seeding ensures BNT faces 1sts.
           const bntRank = championshipRanks[fullRanks]
-          type QFSlot = { fromPool: string; rank: number; isBnt: boolean }
-          const slotData: QFSlot[] = [
-            ...assignments.map(({ poolIdx, rankIdx }) => ({
-              fromPool: poolSlug(poolIdx),
-              rank: deterministicRanks[rankIdx],
-              isBnt: false,
-            })),
-            ...Array.from({ length: remainder }, () => ({
-              fromPool: '__best_rank__',
-              rank: bntRank,
-              isBnt: true,
-            })),
+          const slotData = [
+            ...deterministicSeeds.map(s => ({ fromPool: poolSlug(s.poolIdx), rank: s.rank, isBnt: false })),
+            ...Array.from({ length: remainder }, () => ({ fromPool: '__best_rank__', rank: bntRank, isBnt: true, bestRankCount: remainder, bestRankCriteria })),
           ]
-          const matchCount = qfCapacity / 2
-          for (let m = 0; m < matchCount; m++) {
-            const hi = slotData[m]!
-            const lo = slotData[qfCapacity - 1 - m]!
-            progressions.push({
-              fromPhase: 'group-stage',
-              fromPool: hi.fromPool,
-              ranks: [hi.rank],
-              ...(hi.isBnt ? { sourceType: 'best_rank' as const, isBestRank: true, bestRankCount: remainder, bestRankCriteria } : {}),
-              toPhase: 'quarter-finals',
-              toPool: `match-${m + 1}`,
-              startSlot: 1,
-            })
-            progressions.push({
-              fromPhase: 'group-stage',
-              fromPool: lo.fromPool,
-              ranks: [lo.rank],
-              ...(lo.isBnt ? { sourceType: 'best_rank' as const, isBestRank: true, bestRankCount: remainder, bestRankCriteria } : {}),
-              toPhase: 'quarter-finals',
-              toPool: `match-${m + 1}`,
-              startSlot: 2,
-            })
-          }
+          emitQFProgressions(slotData)
         } else {
-          // No BNT remainder: use cross-seeded slot assignment directly.
-          for (const { poolIdx, rankIdx } of assignments) {
-            if (qfSlot > qfCapacity) break
-            progressions.push({
-              fromPhase: 'group-stage',
-              fromPool: poolSlug(poolIdx),
-              ranks: [deterministicRanks[rankIdx]],
-              toPhase: 'quarter-finals',
-              toPool: `match-${Math.ceil(qfSlot / 2)}`,
-              startSlot: qfSlot % 2 === 0 ? 2 : 1,
-            })
-            qfSlot += 1
-          }
+          // No BNT remainder: all QF slots filled by deterministic seeds.
+          const slotData = deterministicSeeds.slice(0, qfCapacity).map(s => ({ fromPool: poolSlug(s.poolIdx), rank: s.rank, isBnt: false }))
+          emitQFProgressions(slotData)
         }
       } else {
-        // Cross-seeded assignments: avoids same-pool QF matchups and seeds 1sts vs 2nds.
-        const assignments = buildQFCrossSeededAssignments(resolvedPoolCount, championshipRanks)
-        for (const { poolIdx, rankIdx } of assignments) {
-          if (qfSlot > qfCapacity) break
-          progressions.push({
-            fromPhase: 'group-stage',
-            fromPool: poolSlug(poolIdx),
-            ranks: [championshipRanks[rankIdx]],
-            toPhase: 'quarter-finals',
-            toPool: `match-${Math.ceil(qfSlot / 2)}`,
-            startSlot: qfSlot % 2 === 0 ? 2 : 1,
-          })
-          qfSlot += 1
-        }
+        // Exact or under QF capacity: rank-grouped bracket seeding (1sts vs 4ths, 2nds vs 3rds, etc.)
+        const seeds = buildRankGroupedSeeds(resolvedPoolCount, championshipRanks)
+        const slotData = seeds.slice(0, qfCapacity).map(s => ({ fromPool: poolSlug(s.poolIdx), rank: s.rank, isBnt: false }))
+        emitQFProgressions(slotData)
       }
 
       for (let qfIndex = 1; qfIndex <= 4; qfIndex += 1) {
@@ -1400,16 +1595,6 @@ export function resolveFormatBuilder(
   return { ...builder, phases }
 }
 
-function directSlotOrdersForDynamicKnockout(options: FormatBuilderOptions) {
-  const dynamic = buildDynamicKnockout(options.teamCount ?? 16)
-  const totalMainSlots = dynamic.bracketSize
-  const playInWinnerSlots = new Set(
-    playInWinnerSlotOrders(dynamic.bracketSize, dynamic.playInMatchCount)
-  )
-  return Array.from({ length: totalMainSlots }, (_, index) => index + 1).filter(
-    (slotOrder) => !playInWinnerSlots.has(slotOrder)
-  )
-}
 
 function teamsForPool(
   teams: Team[],
@@ -1423,38 +1608,37 @@ function teamsForPool(
   if (template.teamSplit === 'none') return []
   if (template.id === 'knockout-play-ins') {
     const dynamic = buildDynamicKnockout(options.teamCount ?? teams.length)
-    const playInTeamIds = options.playInTeamIds ?? []
-    const playInTeamSet = new Set(playInTeamIds)
+    const byeTeamIds = options.byeTeamIds ?? []
+    const firstRoundSlug = knockoutRoundSlug(dynamic.bracketSize)
 
-    if (phaseSlug === 'preliminary') {
-      return playInTeamIds
-        .slice(poolIndex * 2, poolIndex * 2 + 2)
-        .map((teamId, index) => {
-          const team = teams.find((candidate) => candidate.id === teamId)
-          return team ? { team, slotOrder: index + 1 } : null
-        })
-        .filter((assignment): assignment is TeamAssignment => Boolean(assignment))
+    // Only the first round has direct team assignments; later rounds are filled by progression rules.
+    if (phaseSlug !== firstRoundSlug) return []
+
+    const firstRoundMatchCount = dynamic.bracketSize / 2
+    const byePositions = byeMatchPositionSet(firstRoundMatchCount, dynamic.byeCount)
+    const seededTeams = teams.filter((t) => byeTeamIds.includes(t.id))
+    const unseededTeams = teams.filter((t) => !byeTeamIds.includes(t.id))
+    const matchPosition = poolIndex + 1
+
+    if (byePositions.has(matchPosition)) {
+      // Bye match — assign the seeded team to slot 1; a bye slot will be added separately.
+      const sortedByePositions = [...byePositions].sort((a, b) => a - b)
+      const seededIndex = sortedByePositions.indexOf(matchPosition)
+      const team = seededTeams[seededIndex]
+      return team ? [{ team, slotOrder: 1 }] : []
     }
 
-    if (phaseSlug === knockoutRoundSlug(dynamic.bracketSize)) {
-      const directTeams = teams.filter((team) => !playInTeamSet.has(team.id))
-      const directSlotOrders = directSlotOrdersForDynamicKnockout({
-        ...options,
-        teamCount: teams.length,
-      })
-      return directSlotOrders
-        .map((slotOrder, index) => ({ slotOrder, team: directTeams[index] }))
-        .filter(
-          ({ slotOrder }) =>
-            Math.ceil(slotOrder / 2) === poolIndex + 1
-        )
-        .map(({ slotOrder, team }) => {
-          return team ? { team, slotOrder: slotOrder % 2 === 0 ? 2 : 1 } : null
-        })
-        .filter((assignment): assignment is TeamAssignment => Boolean(assignment))
+    // Normal match — assign 2 unseeded teams.
+    let normalIndex = 0
+    for (let pos = 1; pos < matchPosition; pos++) {
+      if (!byePositions.has(pos)) normalIndex++
     }
-
-    return []
+    const team1 = unseededTeams[normalIndex * 2]
+    const team2 = unseededTeams[normalIndex * 2 + 1]
+    return [
+      ...(team1 ? [{ team: team1, slotOrder: 1 }] : []),
+      ...(team2 ? [{ team: team2, slotOrder: 2 }] : []),
+    ]
   }
   if (template.teamSplit === 'seeded-pools') {
     const size = teamsPerPool ?? 2
@@ -1514,11 +1698,13 @@ export async function applyFormatBuilder(
     teams = (placeholderRows ?? []) as Team[]
   }
   const resolvedOptions = { ...options, teamCount: options.teamCount ?? teams.length }
-  if (selectedBuilder.id === 'knockout-play-ins' && (resolvedOptions.playInTeamIds ?? []).length === 0) {
-    const dynamic = buildDynamicKnockout(teams.length)
-    resolvedOptions.playInTeamIds = teams
-      .slice(0, dynamic.playInMatchCount * 2)
-      .map((team) => team.id)
+  if (selectedBuilder.id === 'knockout-play-ins') {
+    const dynamic = buildDynamicKnockout(resolvedOptions.teamCount ?? teams.length)
+    if ((resolvedOptions.byeTeamIds ?? []).length === 0 && dynamic.byeCount > 0) {
+      // Auto-assign first byeCount teams as seeded (receives a bye).
+      resolvedOptions.byeTeamIds = teams.slice(0, dynamic.byeCount).map((t) => t.id)
+    }
+    resolvedOptions.playInTeamIds = []
   }
   const builder = resolveFormatBuilder(selectedBuilder, resolvedOptions)
   const teamsPerPool =
@@ -1809,6 +1995,27 @@ export async function applyFormatBuilder(
         label: assignment.team.name,
         slot_type: 'team',
         team_id: assignment.team.id,
+        source_phase_id: null,
+        source_element_id: null,
+        source_pool_id: null,
+        source_match_id: null,
+        source_rank: null,
+        source_outcome: null,
+        metadata: {},
+      })
+    }
+    // For knockout bye matches (exactly 1 assigned team at slot 1), add a bye slot at slot 2.
+    if (
+      selectedBuilder.id === 'knockout-play-ins' &&
+      assignedTeams.length === 1 &&
+      assignedTeams[0].slotOrder === 1
+    ) {
+      slotPayloads.push({
+        phase_element_id: element.id,
+        display_order: 2,
+        label: 'Bye',
+        slot_type: 'bye',
+        team_id: null,
         source_phase_id: null,
         source_element_id: null,
         source_pool_id: null,

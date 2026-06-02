@@ -29,6 +29,30 @@ Both are safe to ship to the browser — Row Level Security enforces access cont
 
 ---
 
+## QA commands
+
+Phase 1 adds the test runners and scripts. Test data and actual suites are added in later phases.
+
+```bash
+npm run typecheck       # TypeScript only
+npm run lint            # ESLint
+npm run test:unit       # Vitest unit tests
+npm run test:unit:watch # Vitest watch mode
+npm run test:e2e        # Playwright against an already running app or external base URL
+npm run test:e2e:local  # Playwright starts the Next dev server
+npm run qa:seed         # Create deterministic QA data in the configured Supabase project
+npm run qa:cleanup      # Delete the QA tournament and cascaded data
+npm run qa:reset        # Cleanup then seed
+npm run qa:check        # Typecheck, lint, unit, and E2E
+npm run qa              # Seed, run checks, cleanup
+```
+
+For E2E tests against a deployed/staging site, set `PLAYWRIGHT_BASE_URL`.
+
+QA seed/cleanup requires `SUPABASE_SERVICE_ROLE_KEY`. Remote Supabase projects are blocked unless `QA_ALLOW_REMOTE=1` is set, and the tournament slug must start with `qa-`.
+
+---
+
 ## Supabase setup
 
 Use [`supabase/README.md`](./supabase/README.md) as the source of truth for database setup.

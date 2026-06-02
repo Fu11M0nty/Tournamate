@@ -21,9 +21,10 @@ export default function FixtureCard({
 }: FixtureCardProps) {
   const time = formatKickoffTime(match.kickoff_time)
   const date = formatKickoffDate(match.kickoff_time)
+  const isByeMatch = match.away_team_id === null && !match.away_slot_id
   const homeName = homeTeam?.name ?? homeLabel ?? 'TBD'
-  const awayName = awayTeam?.name ?? awayLabel ?? 'TBD'
-  const isTbd = !homeTeam || !awayTeam
+  const awayName = isByeMatch ? 'Bye' : (awayTeam?.name ?? awayLabel ?? 'TBD')
+  const isTbd = !isByeMatch && (!homeTeam || !awayTeam)
 
   return (
     <article className={`overflow-hidden rounded-xl border bg-white shadow-sm dark:bg-zinc-950 ${isTbd ? 'border-amber-200 dark:border-amber-900/50' : 'border-zinc-100 dark:border-zinc-800'}`}>
@@ -73,7 +74,11 @@ export default function FixtureCard({
 
         {/* Away row */}
         <div className="flex items-center gap-3 py-2.5">
-          {awayTeam ? (
+          {isByeMatch ? (
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-[9px] font-black text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500">
+              —
+            </span>
+          ) : awayTeam ? (
             <TeamLogo team={awayTeam} size="sm" />
           ) : (
             <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-100 text-[9px] font-black text-amber-800 dark:bg-amber-950 dark:text-amber-300">
@@ -81,7 +86,7 @@ export default function FixtureCard({
             </span>
           )}
           <span
-            className={`flex-1 truncate text-sm ${awayTeam ? 'font-medium text-zinc-700 dark:text-zinc-300' : 'font-semibold text-amber-700 dark:text-amber-400'}`}
+            className={`flex-1 truncate text-sm ${isByeMatch ? 'italic text-zinc-400 dark:text-zinc-500' : awayTeam ? 'font-medium text-zinc-700 dark:text-zinc-300' : 'font-semibold text-amber-700 dark:text-amber-400'}`}
             title={awayName}
           >
             {awayName}

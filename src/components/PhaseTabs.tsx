@@ -25,7 +25,10 @@ export default function PhaseTabs({
   function hrefFor(phase: Phase) {
     const params = new URLSearchParams()
     params.set('phase', phase.slug)
-    if (teamFilterId) params.set('team', teamFilterId)
+    const phaseSupportsTeamFilter =
+      phase.phase_type !== 'knockout' &&
+      (phase.standings_mode === 'visible' || phase.standings_mode === 'none')
+    if (teamFilterId && phaseSupportsTeamFilter) params.set('team', teamFilterId)
     return `${basePath}?${params.toString()}`
   }
 

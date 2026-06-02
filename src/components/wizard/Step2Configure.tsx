@@ -7,6 +7,8 @@ import FormatDiagram from '@/components/FormatDiagram'
 type FinalsStyle = 'none' | 'final_only' | 'final_and_third' | 'semi_final_final' | 'top4_double_elimination'
 type PlacementStyle = 'final_only' | 'final_and_third' | 'all_placements'
 
+const TEAM_COUNT_PRESETS = [4, 8, 16, 32, 64]
+
 const FINALS_STYLE_OPTIONS: { value: FinalsStyle; label: string }[] = [
   { value: 'none', label: 'No finals' },
   { value: 'final_only', label: 'Final only' },
@@ -31,12 +33,6 @@ const BNT_CRITERIA_OPTIONS: { key: string; label: string }[] = [
 
 const DEFAULT_BNT_CRITERIA = ['points', 'goal_difference', 'goals_for']
 
-function parseRanks(text: string): number[] {
-  return text
-    .split(',')
-    .map((s) => Number(s.trim()))
-    .filter((n) => Number.isFinite(n) && n > 0 && Number.isInteger(n))
-}
 
 function ordinalSuffix(n: number) {
   if (n === 1) return '1st'
@@ -66,10 +62,12 @@ export default function Step2Configure({
   const hasConfig = Boolean(cfg)
   const [showDoubleEliminationWarning, setShowDoubleEliminationWarning] = useState(false)
 
-  // Local text state for plate rank input only — championship ranks now use toggle buttons.
-  const [plateRankText, setPlateRankText] = useState(
-    () => (options.plateRanks ?? cfg?.plateRanks?.defaultValue ?? [3, 4]).join(', ')
+  const currentKnockoutCount = options.teamCount ?? cfg?.teamCount?.defaultValue ?? 16
+  const [isOtherCount, setIsOtherCount] = useState(
+    () => cfg?.teamCount != null && !TEAM_COUNT_PRESETS.includes(currentKnockoutCount)
   )
+
+  const isGrading = builder.id === 'grading-championship'
 
   // BNT criteria local state — drives the reorderer UI and syncs to parent options.
   const [bntCriteria, setBntCriteria] = useState<string[]>(
@@ -83,9 +81,9 @@ export default function Step2Configure({
   const doubleEliminationBlocked = effectivePoolCount > 2
   const currentFinalsStyle = (options.finalsStyle as FinalsStyle | undefined) ?? cfg?.finalsStyle?.defaultValue ?? 'none'
 
-  // Dynamic pool count maximum — depends on finals style.
+  // Dynamic pool count maximum — depends on finals style (not applicable to grading format).
   const poolCountMax = (() => {
-    if (!cfg?.pools || !cfg?.finalsStyle) return cfg?.pools?.max ?? 12
+    if (!cfg?.pools || !cfg?.finalsStyle || isGrading) return cfg?.pools?.max ?? 12
     switch (currentFinalsStyle) {
       case 'final_only':
       case 'final_and_third':
@@ -110,12 +108,15 @@ export default function Step2Configure({
   const sfCapacity = 4
   const qfCapacity = 8
 
-  const bntQfApplies = qualifierCount !== null && qualifierCount > qfCapacity && currentFinalsStyle === 'semi_final_final'
-  const bntQfFullRanks = bntQfApplies ? Math.floor(qfCapacity / effectivePoolCount) : null
-  const bntQfRemainder = bntQfApplies ? qfCapacity % effectivePoolCount : null
-  const bntQfRank = bntQfFullRanks !== null && currentChampionshipRanks.length > bntQfFullRanks
+  const bntQfZone = qualifierCount !== null && qualifierCount > qfCapacity && currentFinalsStyle === 'semi_final_final'
+  const bntQfFullRanks = bntQfZone ? Math.floor(qfCapacity / effectivePoolCount) : null
+  const bntQfRemainder = bntQfZone ? qfCapacity % effectivePoolCount : null
+  // BNT only applies when there are leftover QF slots that can't be filled by whole-pool rounds.
+  const bntQfRank = (bntQfFullRanks !== null && bntQfRemainder !== null && bntQfRemainder > 0
+    && currentChampionshipRanks.length > bntQfFullRanks)
     ? currentChampionshipRanks[bntQfFullRanks]
     : null
+  const bntQfApplies = bntQfZone && bntQfRank !== null
 
   const bntSfApplies = qualifierCount !== null
     && qualifierCount > sfCapacity
@@ -127,6 +128,46 @@ export default function Step2Configure({
   const bntSfRank = bntSfApplies ? (currentChampionshipRanks[1] ?? null) : null
 
   const bntApplies = bntQfApplies || bntSfApplies
+
+  // Grading-specific state
+  const currentPlateRanks = options.plateRanks ?? cfg?.plateRanks?.defaultValue ?? [3, 4]
+  const currentGradingFinalsStyle = (options.finalsStyle as FinalsStyle | undefined) ?? 'none'
+  const directToFinals = options.directToFinals === true
+  const champTeams = isGrading ? currentChampionshipRanks.length * effectivePoolCount : 0
+  const plateTeams = isGrading ? currentPlateRanks.length * effectivePoolCount : 0
+  const directToFinalsAvailable = isGrading && effectivePoolCount <= 4
+
+  // Championship & Plate group size cap (not relevant for direct-to-finals)
+  const currentChampGroupSize = isGrading && !directToFinals
+    ? (options.champGroupSize ?? cfg?.champGroupSize?.defaultValue ?? 8)
+    : null
+  const effectiveChampInGroup = currentChampGroupSize !== null ? Math.min(champTeams, currentChampGroupSize) : champTeams
+  const effectivePlateInGroup = currentChampGroupSize !== null ? Math.min(plateTeams, currentChampGroupSize) : plateTeams
+  const champGroupSizeTooSmall = currentChampGroupSize !== null && currentChampGroupSize < effectivePoolCount
+
+  const gradingFinalsUnlocked = effectiveChampInGroup >= 4 && effectivePlateInGroup >= 4
+  const gradingFinalsLowTeamWarning = isGrading && currentGradingFinalsStyle !== 'none' && !gradingFinalsUnlocked
+
+  // Grading BNT — fires when qualifiers exceed the group size cap (standard path only)
+  const gradingChampBntNeeded = !directToFinals && currentChampGroupSize !== null && champTeams > currentChampGroupSize
+  const gradingChampFullRanks = gradingChampBntNeeded ? Math.floor(currentChampGroupSize! / effectivePoolCount) : null
+  const gradingChampRemainder = gradingChampBntNeeded && gradingChampFullRanks !== null
+    ? currentChampGroupSize! - gradingChampFullRanks * effectivePoolCount : null
+  const gradingChampBntRank = (gradingChampFullRanks !== null && gradingChampRemainder !== null
+    && gradingChampRemainder > 0 && currentChampionshipRanks.length > gradingChampFullRanks)
+    ? currentChampionshipRanks[gradingChampFullRanks] : null
+  const gradingChampBntApplies = gradingChampBntRank !== null && gradingChampRemainder !== null && gradingChampRemainder > 0
+
+  const gradingPlateBntNeeded = !directToFinals && currentChampGroupSize !== null && plateTeams > currentChampGroupSize
+  const gradingPlateFullRanks = gradingPlateBntNeeded ? Math.floor(currentChampGroupSize! / effectivePoolCount) : null
+  const gradingPlateRemainder = gradingPlateBntNeeded && gradingPlateFullRanks !== null
+    ? currentChampGroupSize! - gradingPlateFullRanks * effectivePoolCount : null
+  const gradingPlateBntRank = (gradingPlateFullRanks !== null && gradingPlateRemainder !== null
+    && gradingPlateRemainder > 0 && currentPlateRanks.length > gradingPlateFullRanks)
+    ? currentPlateRanks[gradingPlateFullRanks] : null
+  const gradingPlateBntApplies = gradingPlateBntRank !== null && gradingPlateRemainder !== null && gradingPlateRemainder > 0
+
+  const gradingBntApplies = isGrading && (gradingChampBntApplies || gradingPlateBntApplies)
 
   // BNT criteria helpers
   function moveBntCriterion(index: number, direction: -1 | 1) {
@@ -158,24 +199,32 @@ export default function Step2Configure({
 
   // Collect configuration errors that must be resolved before proceeding.
   const validationErrors: string[] = []
-  if (showDoubleEliminationWarning) {
+  if (!isGrading && showDoubleEliminationWarning) {
     validationErrors.push(
       `Top 4 double elimination is not available with ${effectivePoolCount} pools. Choose a different finals format or reduce to 2 pools.`
     )
   }
-  if (cfg?.pools && effectivePoolCount > poolCountMax) {
+  if (!isGrading && cfg?.pools && effectivePoolCount > poolCountMax) {
     validationErrors.push(
       `${FINALS_STYLE_OPTIONS.find(o => o.value === currentFinalsStyle)?.label ?? 'This finals format'} supports at most ${poolCountMax} group-stage pool${poolCountMax === 1 ? '' : 's'}. Reduce the pool count or change the finals format.`
     )
   }
-  if (qualifierCount !== null && currentFinalsStyle === 'final_only' && qualifierCount < 2) {
+  if (!isGrading && qualifierCount !== null && currentFinalsStyle === 'final_only' && qualifierCount < 2) {
     validationErrors.push('Final only requires at least 2 qualifying teams. Add more pools or increase the qualifying ranks.')
   }
-  if (qualifierCount !== null && currentFinalsStyle === 'final_and_third' && qualifierCount < 4) {
+  if (!isGrading && qualifierCount !== null && currentFinalsStyle === 'final_and_third' && qualifierCount < 4) {
     validationErrors.push(`Final + 3rd Place requires at least 4 qualifying teams (currently ${qualifierCount}). Add more pools or increase the qualifying ranks.`)
   }
-  if (qualifierCount !== null && currentFinalsStyle === 'semi_final_final' && qualifierCount < 4) {
+  if (!isGrading && qualifierCount !== null && currentFinalsStyle === 'semi_final_final' && qualifierCount < 4) {
     validationErrors.push(`Semi-finals + Final requires at least 4 qualifying teams (currently ${qualifierCount}). Add more pools or qualifying ranks.`)
+  }
+  // SF+BNT zone: ranks beyond index 1 aren't used (only rank[0] deterministic + rank[1] BNT).
+  // Example: 2 pools × [1,2,3] = 6 qualifiers — can't fill QF (needs 8), so 3rd place is wasted.
+  if (!isGrading && bntSfApplies && currentChampionshipRanks.length > 2 && qualifierCount !== null) {
+    const wastedOrdinals = currentChampionshipRanks.slice(2).map(ordinalSuffix).join(' and ')
+    validationErrors.push(
+      `${wastedOrdinals} place won't qualify: ${effectivePoolCount} pool${effectivePoolCount > 1 ? 's' : ''} with ${currentChampionshipRanks.length} ranks gives ${qualifierCount} teams — not enough for a Quarter-Final (needs 8). Add 4th rank to use QF, or remove ${wastedOrdinals} for Semi-Finals.`
+    )
   }
 
   return (
@@ -216,6 +265,10 @@ export default function Step2Configure({
                 if (newCount === 1 && currentFinalsStyle === 'semi_final_final') {
                   patch.championshipRanks = [1, 2, 3, 4]
                 }
+                // Direct-to-finals only valid when poolCount <= 4.
+                if (newCount > 4 && directToFinals) {
+                  patch.directToFinals = false
+                }
                 setShowDoubleEliminationWarning(false)
                 onChange(patch)
               }}
@@ -240,7 +293,7 @@ export default function Step2Configure({
           </label>
         )}
 
-        {cfg?.finalsStyle && (
+        {cfg?.finalsStyle && !isGrading && (
           <div className="block">
             <label htmlFor="finals-style-select" className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
               {cfg.finalsStyle.label ?? 'Finals format'}
@@ -297,6 +350,62 @@ export default function Step2Configure({
           </label>
         )}
 
+        {cfg?.teamCount && (
+          <div>
+            <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+              {cfg.teamCount.label}
+            </span>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {TEAM_COUNT_PRESETS.map((preset) => {
+                const isSelected = !isOtherCount && currentKnockoutCount === preset
+                return (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => {
+                      setIsOtherCount(false)
+                      onChange({ teamCount: preset })
+                    }}
+                    className={[
+                      'rounded-md border px-3 py-1.5 text-sm font-semibold transition-colors',
+                      isSelected
+                        ? 'border-mk-red bg-mk-red text-white shadow-sm'
+                        : 'border-zinc-300 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800',
+                    ].join(' ')}
+                  >
+                    {preset}
+                  </button>
+                )
+              })}
+              <button
+                type="button"
+                onClick={() => setIsOtherCount(true)}
+                className={[
+                  'rounded-md border px-3 py-1.5 text-sm font-semibold transition-colors',
+                  isOtherCount
+                    ? 'border-mk-red bg-mk-red text-white shadow-sm'
+                    : 'border-zinc-300 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800',
+                ].join(' ')}
+              >
+                Other
+              </button>
+            </div>
+            {isOtherCount && (
+              <input
+                type="number"
+                min={cfg.teamCount.min}
+                max={cfg.teamCount.max}
+                value={currentKnockoutCount}
+                onChange={(e) =>
+                  onChange({ teamCount: Math.max(cfg!.teamCount!.min, Math.min(cfg!.teamCount!.max, Number(e.target.value))) })
+                }
+                placeholder={`${cfg.teamCount.min}–${cfg.teamCount.max}`}
+                className="mt-2 block w-32 rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-mk-red focus:outline-none focus:ring-1 focus:ring-mk-red dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+              />
+            )}
+          </div>
+        )}
+
         {cfg?.leagueRepeatCount && (
           <label className="block">
             <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
@@ -321,21 +430,32 @@ export default function Step2Configure({
             <div className="mt-2 flex flex-wrap gap-2">
               {[1, 2, 3, 4].map((rank) => {
                 const isSelected = currentChampionshipRanks.includes(rank)
-                const prospective = effectivePoolCount * (currentChampionshipRanks.length + 1)
-                const prospectiveRanksLen = currentChampionshipRanks.length + 1
+                const maxExisting = currentChampionshipRanks.length > 0 ? Math.max(...currentChampionshipRanks) : 0
+                // Auto-fill count: clicking rank R from [1..k] fills ranks k+1..R as well.
+                const autoFilledCount = currentChampionshipRanks.length + Math.max(0, rank - maxExisting)
+                const autoFilledQualifiers = effectivePoolCount * autoFilledCount
                 let isDisabled = false
                 if (!isSelected && cfg?.finalsStyle) {
                   switch (currentFinalsStyle) {
                     case 'final_only':
-                      isDisabled = prospective > 2; break
+                      isDisabled = autoFilledQualifiers > 2; break
                     case 'final_and_third':
                     case 'top4_double_elimination':
-                      isDisabled = prospective > 4; break
-                    case 'semi_final_final':
-                      if (prospective >= qfCapacity) { isDisabled = true; break }
-                      // SF+BNT only uses the first 2 rank indices — a 3rd+ rank would be unused
-                      if (prospective > sfCapacity && prospectiveRanksLen >= 3) isDisabled = true
+                      isDisabled = autoFilledQualifiers > 4; break
+                    case 'semi_final_final': {
+                      // Disable if auto-filling to this rank creates a state where those ranks are wasted.
+                      const N = effectivePoolCount
+                      if (autoFilledQualifiers > sfCapacity && autoFilledQualifiers < qfCapacity && N < sfCapacity) {
+                        // SF+BNT zone: only first 2 ranks are used; extra ranks are wasted.
+                        if (autoFilledCount > 2) isDisabled = true
+                      } else if (autoFilledQualifiers > qfCapacity) {
+                        const qfFull = Math.floor(qfCapacity / N)
+                        const qfRem = qfCapacity % N
+                        const maxUseful = qfFull + (qfRem > 0 ? 1 : 0)
+                        if (autoFilledCount > maxUseful) isDisabled = true
+                      }
                       break
+                    }
                   }
                 }
                 return (
@@ -349,7 +469,12 @@ export default function Step2Configure({
                         next = currentChampionshipRanks.filter(r => r !== rank)
                         if (next.length === 0) return
                       } else {
-                        next = [...currentChampionshipRanks, rank].sort((a, b) => a - b)
+                        // Auto-fill all ranks between the current max and this rank.
+                        next = [...currentChampionshipRanks]
+                        for (let r = maxExisting + 1; r <= rank; r++) {
+                          if (!next.includes(r)) next.push(r)
+                        }
+                        next.sort((a, b) => a - b)
                       }
                       onChange({ championshipRanks: next })
                     }}
@@ -376,38 +501,196 @@ export default function Step2Configure({
         )}
 
         {cfg?.plateRanks && (
+          <div className="block">
+            <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+              {cfg.plateRanks.label ?? 'Ranks to Plate'}
+            </span>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {[1, 2, 3, 4, 5, 6].map((rank) => {
+                const takenByChampionship = currentChampionshipRanks.includes(rank)
+                const isSelected = currentPlateRanks.includes(rank)
+                return (
+                  <button
+                    key={rank}
+                    type="button"
+                    disabled={takenByChampionship}
+                    title={takenByChampionship ? `${ordinalSuffix(rank)} place is already assigned to Championship` : undefined}
+                    onClick={() => {
+                      let next: number[]
+                      if (isSelected) {
+                        next = currentPlateRanks.filter(r => r !== rank)
+                        if (next.length === 0) return
+                      } else {
+                        next = [...currentPlateRanks, rank].sort((a, b) => a - b)
+                      }
+                      onChange({ plateRanks: next })
+                    }}
+                    className={[
+                      'rounded-md border px-3 py-1.5 text-sm font-semibold transition-colors',
+                      takenByChampionship
+                        ? 'cursor-not-allowed border-zinc-200 bg-zinc-100 text-zinc-400 dark:border-zinc-800 dark:bg-zinc-800/50 dark:text-zinc-600'
+                        : isSelected
+                          ? 'border-mk-red bg-mk-red text-white shadow-sm'
+                          : 'border-zinc-300 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800',
+                    ].join(' ')}
+                  >
+                    {ordinalSuffix(rank)}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {cfg?.champGroupSize && !directToFinals && (
           <label className="block">
             <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-              {cfg.plateRanks.label ?? 'Ranks to Plate'} (comma-separated)
+              {cfg.champGroupSize.label}
             </span>
             <input
-              type="text"
-              value={plateRankText}
-              onChange={(e) => {
-                const text = e.target.value
-                setPlateRankText(text)
-                const ranks = parseRanks(text)
-                if (ranks.length > 0) onChange({ plateRanks: ranks })
-              }}
-              onBlur={() => {
-                const ranks = parseRanks(plateRankText)
-                if (ranks.length > 0) {
-                  setPlateRankText(ranks.join(', '))
-                } else {
-                  const fallback = cfg.plateRanks!.defaultValue ?? [3, 4]
-                  setPlateRankText(fallback.join(', '))
-                  onChange({ plateRanks: fallback })
-                }
-              }}
-              placeholder="e.g. 3, 4"
+              type="number"
+              min={cfg.champGroupSize.min}
+              max={cfg.champGroupSize.max}
+              value={currentChampGroupSize ?? cfg.champGroupSize.defaultValue}
+              onChange={(e) => onChange({ champGroupSize: Number(e.target.value) })}
               className="mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-mk-red focus:outline-none focus:ring-1 focus:ring-mk-red dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
             />
+            {champGroupSizeTooSmall && (
+              <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                Group size ({currentChampGroupSize}) is less than the pool count ({effectivePoolCount}) — some pool winners may not qualify to Championship or Plate.
+              </p>
+            )}
           </label>
+        )}
+
+        {/* Grading-specific: optional finals for Championship and Plate */}
+        {isGrading && (
+          <div className="block">
+            <label htmlFor="grading-finals-style" className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+              Finals format (Championship &amp; Plate)
+            </label>
+            {!gradingFinalsUnlocked && currentGradingFinalsStyle === 'none' && (
+              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                Requires at least 4 teams in each bracket (currently {effectiveChampInGroup} to Championship, {effectivePlateInGroup} to Plate). Increase pools, qualifying ranks, or the group size to unlock.
+              </p>
+            )}
+            <select
+              id="grading-finals-style"
+              value={currentGradingFinalsStyle}
+              disabled={!gradingFinalsUnlocked && currentGradingFinalsStyle === 'none'}
+              onChange={(e) => onChange({ finalsStyle: e.target.value as FinalsStyle })}
+              className="mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-mk-red focus:outline-none focus:ring-1 focus:ring-mk-red disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+            >
+              <option value="none">No finals</option>
+              <option value="final_only">Final only</option>
+              <option value="semi_final_final">Semi-finals + Final</option>
+              <option value="top4_double_elimination">Double Elimination (Top 4)</option>
+            </select>
+            {gradingFinalsLowTeamWarning && (
+              <p className="mt-1.5 text-xs text-amber-700 dark:text-amber-400">
+                Currently only {Math.min(effectiveChampInGroup, effectivePlateInGroup)} teams in the smaller bracket — finals work best with at least 4. Adjust pools, qualifying ranks, or the group size, or change to "No finals".
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Grading-specific: direct-to-finals toggle */}
+        {isGrading && (
+          <div className="flex items-start gap-3 rounded-lg border border-zinc-200 p-3 dark:border-zinc-700">
+            <input
+              id="direct-to-finals"
+              type="checkbox"
+              checked={directToFinals}
+              disabled={!directToFinalsAvailable && !directToFinals}
+              onChange={(e) => {
+                const next = e.target.checked
+                const patch: Partial<FormatBuilderOptions> = { directToFinals: next }
+                if (next && currentGradingFinalsStyle === 'none') {
+                  patch.finalsStyle = 'semi_final_final'
+                }
+                onChange(patch)
+              }}
+              className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border-zinc-300 accent-mk-red disabled:cursor-not-allowed disabled:opacity-40"
+            />
+            <div>
+              <label htmlFor="direct-to-finals" className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 cursor-pointer">
+                Skip group phases — qualify directly to finals
+              </label>
+              {directToFinalsAvailable ? (
+                <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+                  Grading pool results feed directly into Championship and Plate finals brackets, skipping the group stage.
+                </p>
+              ) : (
+                <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+                  Not available with more than 4 grading pools.
+                </p>
+              )}
+            </div>
+          </div>
         )}
       </div>
 
+      {/* Grading: unified Championship & Plate BNT panel */}
+      {gradingBntApplies && (
+        <div className="rounded-lg border border-sky-200 bg-sky-50 p-4 dark:border-sky-800 dark:bg-sky-950/40">
+          <p className="text-sm font-bold text-sky-900 dark:text-sky-200">
+            Best rank selection — Championship &amp; Plate
+          </p>
+          <p className="mt-1 text-xs text-sky-800 dark:text-sky-300">
+            More teams qualify than the group size ({currentChampGroupSize}) allows. The tiebreaker criteria below determine which teams fill the remaining spots — the same rules apply to both brackets.
+          </p>
+          {gradingChampBntApplies && gradingChampRemainder !== null && gradingChampBntRank !== null && gradingChampFullRanks !== null && (
+            <div className="mt-2 rounded bg-sky-100/60 px-3 py-2 dark:bg-sky-900/40">
+              <p className="text-xs font-semibold text-sky-800 dark:text-sky-200">Championship</p>
+              <p className="mt-0.5 text-xs text-sky-700 dark:text-sky-300">
+                {gradingChampFullRanks > 0
+                  ? <>All {effectivePoolCount} pools&apos; {currentChampionshipRanks.slice(0, gradingChampFullRanks).map(ordinalSuffix).join(' &amp; ')}-placed teams qualify ({gradingChampFullRanks * effectivePoolCount} of {currentChampGroupSize} spots). The remaining {gradingChampRemainder} spot{gradingChampRemainder !== 1 ? 's are' : ' is'} filled by the {gradingChampRemainder} best {ordinalSuffix(gradingChampBntRank)}-placed team{gradingChampRemainder !== 1 ? 's' : ''} across all pools.</>
+                  : <>The {gradingChampRemainder} best {ordinalSuffix(gradingChampBntRank)}-placed team{gradingChampRemainder !== 1 ? 's' : ''} across all {effectivePoolCount} pools fill all {gradingChampRemainder} spot{gradingChampRemainder !== 1 ? 's' : ''}.</>
+                }
+              </p>
+            </div>
+          )}
+          {gradingPlateBntApplies && gradingPlateRemainder !== null && gradingPlateBntRank !== null && gradingPlateFullRanks !== null && (
+            <div className="mt-1 rounded bg-sky-100/60 px-3 py-2 dark:bg-sky-900/40">
+              <p className="text-xs font-semibold text-sky-800 dark:text-sky-200">Plate</p>
+              <p className="mt-0.5 text-xs text-sky-700 dark:text-sky-300">
+                {gradingPlateFullRanks > 0
+                  ? <>All {effectivePoolCount} pools&apos; {currentPlateRanks.slice(0, gradingPlateFullRanks).map(ordinalSuffix).join(' &amp; ')}-placed teams qualify ({gradingPlateFullRanks * effectivePoolCount} of {currentChampGroupSize} spots). The remaining {gradingPlateRemainder} spot{gradingPlateRemainder !== 1 ? 's are' : ' is'} filled by the {gradingPlateRemainder} best {ordinalSuffix(gradingPlateBntRank)}-placed team{gradingPlateRemainder !== 1 ? 's' : ''} across all pools.</>
+                  : <>The {gradingPlateRemainder} best {ordinalSuffix(gradingPlateBntRank)}-placed team{gradingPlateRemainder !== 1 ? 's' : ''} across all {effectivePoolCount} pools fill all {gradingPlateRemainder} spot{gradingPlateRemainder !== 1 ? 's' : ''}.</>
+                }
+              </p>
+            </div>
+          )}
+          <ol className="mt-3 space-y-1.5">
+            {bntCriteria.map((key, i) => {
+              const option = BNT_CRITERIA_OPTIONS.find((o) => o.key === key)
+              if (!option) return null
+              return (
+                <li key={key} className="flex items-center gap-2">
+                  <span className="w-4 shrink-0 text-center text-xs font-bold text-sky-600 dark:text-sky-400">{i + 1}.</span>
+                  <span className="flex-1 text-sm text-sky-900 dark:text-sky-100">{option.label}</span>
+                  <button type="button" disabled={i === 0} onClick={() => moveBntCriterion(i, -1)} title="Move up" className="text-sky-500 disabled:opacity-25 hover:text-sky-700 dark:hover:text-sky-300">▲</button>
+                  <button type="button" disabled={i === bntCriteria.length - 1} onClick={() => moveBntCriterion(i, 1)} title="Move down" className="text-sky-500 disabled:opacity-25 hover:text-sky-700 dark:hover:text-sky-300">▼</button>
+                  {bntCriteria.length > 1 && (
+                    <button type="button" onClick={() => removeBntCriterion(i)} title="Remove" className="text-sky-400 hover:text-red-500 dark:hover:text-red-400">×</button>
+                  )}
+                </li>
+              )
+            })}
+          </ol>
+          {bntCriteria.length < BNT_CRITERIA_OPTIONS.length && (
+            <select value="" onChange={(e) => { if (e.target.value) addBntCriterion(e.target.value) }} className="mt-3 rounded border border-sky-300 bg-white px-2 py-1 text-xs text-sky-700 dark:border-sky-700 dark:bg-sky-900 dark:text-sky-300">
+              <option value="">+ Add tie-breaker…</option>
+              {BNT_CRITERIA_OPTIONS.filter((o) => !bntCriteria.includes(o.key)).map((o) => (
+                <option key={o.key} value={o.key}>{o.label}</option>
+              ))}
+            </select>
+          )}
+        </div>
+      )}
+
       {/* Best nth-placed team selection panel — shown when BNT selection is needed */}
-      {bntApplies && (
+      {bntApplies && !isGrading && (
         <div className="rounded-lg border border-sky-200 bg-sky-50 p-4 dark:border-sky-800 dark:bg-sky-950/40">
           {bntSfApplies && bntSfRank !== null && bntSfCount !== null ? (
             <>
@@ -496,7 +779,7 @@ export default function Step2Configure({
       )}
 
       {/* Live format diagram */}
-      <FormatDiagram builder={builder} options={{ ...options, bestRankCriteria: bntCriteria }} teamCount={teamCount} />
+      <FormatDiagram builder={builder} options={{ ...options, bestRankCriteria: bntCriteria }} teamCount={options.teamCount ?? teamCount} />
 
       {validationErrors.length > 0 && (
         <ul className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950/40">

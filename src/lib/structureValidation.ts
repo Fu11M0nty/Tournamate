@@ -263,6 +263,11 @@ export function buildReadyChecks({
   const duplicateSummaries: string[] = []
 
   for (const phase of phases) {
+    // Knockout phases have partial or no direct team assignments by design — only the first round
+    // has direct assignments (and bye slots for seeded teams); later rounds are filled by progression
+    // rules as matches are completed. Checking "all teams assigned" produces false positives.
+    if (phase.phase_type === 'knockout') continue
+
     const assignmentsByTeam = new Map<string, string[]>()
     for (const pool of phase.pools ?? []) {
       for (const assignment of pool.pool_teams ?? []) {
@@ -361,7 +366,10 @@ export function buildReadyChecks({
   }
 
   const scheduledCount = matches.filter((match) => match.is_planned).length
-  const placeholderCount = matches.filter((match) => !match.home_team_id || !match.away_team_id).length
+  // Exclude completed bye matches (away_team_id=null, status=completed) from the placeholder count.
+  const placeholderCount = matches.filter(
+    (match) => (!match.home_team_id || !match.away_team_id) && match.status !== 'completed'
+  ).length
   const hasQualificationNeeds = placeholderCount > 0 || phases.some((phase) => phase.display_order > 1)
 
   return [
