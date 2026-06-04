@@ -12,7 +12,15 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { calculateStandings } from '../../lib/standings';
 import { supabase } from '../../lib/supabase';
-import { venueLabel, type Division, type Match, type Team, type Tournament } from '../../lib/types';
+import {
+  venueLabel,
+  type Division,
+  type Match,
+  type Phase,
+  type Pool,
+  type Team,
+  type Tournament,
+} from '../../lib/types';
 
 type TabKey = 'info' | 'teams' | 'standings' | 'schedule';
 const TABS: { key: TabKey; label: string }[] = [
@@ -38,9 +46,7 @@ export default function TournamentHubScreen() {
 
     const { data: tData, error: tErr } = await supabase
       .from('tournaments')
-      .select(
-        'id, slug, name, status, start_date, end_date, venue_name, venue_city, description, is_public, display_order',
-      )
+      .select('*')
       .eq('slug', tournamentSlug)
       .maybeSingle();
 
@@ -60,9 +66,19 @@ export default function TournamentHubScreen() {
 
     const { data: dData, error: dErr } = await supabase
       .from('age_groups')
-      .select('id, tournament_id, name, slug, day, display_order, gender, skill_level')
+      .select(
+        `*,
+         scoring_system:scoring_systems(*),
+         phases (
+           *,
+           scoring_system:scoring_systems(*),
+           pools (
+             *,
+             pool_teams(*)
+           )
+         )`,
+      )
       .eq('tournament_id', tData.id)
-      .order('day', { ascending: true })
       .order('display_order', { ascending: true });
 
     if (dErr) {
@@ -86,15 +102,14 @@ export default function TournamentHubScreen() {
     const [teamsRes, matchesRes] = await Promise.all([
       supabase
         .from('teams')
-        .select('id, age_group_id, name, short_name, color, logo_url')
+        .select('*')
         .in('age_group_id', divIds)
         .is('deleted_at', null),
       supabase
         .from('matches')
-        .select(
-          'id, age_group_id, home_team_id, away_team_id, home_score, away_score, court, kickoff_time, status, home_no_show, away_no_show, home_late_minutes, away_late_minutes',
-        )
+        .select('*')
         .in('age_group_id', divIds)
+        .is('deleted_at', null)
         .order('kickoff_time', { ascending: true }),
     ]);
 
@@ -262,9 +277,7 @@ function TeamsTab({ divisions, teams }: { divisions: Division[]; teams: Team[] }
     return byDiv;
   }, [teams]);
 
-  if (divisions.length === 0) {
-    return <Empty text="No divisions yet." />;
-  }
+  if (divisions.length === 0) return <Empty text="No divisions yet." />;
   return (
     <View style={styles.tabContent}>
       {divisions.map((d) => {
@@ -273,18 +286,24 @@ function TeamsTab({ divisions, teams }: { divisions: Division[]; teams: Team[] }
           <View key={d.id} style={styles.divisionBlock}>
             <Text style={styles.divisionHeader}>
               {d.name}
-              <Text style={styles.divisionHeaderMeta}>  ·  {capitalise(d.day)}  ·  {ts.length} {ts.length === 1 ? 'team' : 'teams'}</Text>
+              <Text style={styles.divisionHeaderMeta}>
+                {'  ·  '}
+                {capitalise(d.day)}
+                {'  ·  '}
+                {ts.length} {ts.length === 1 ? 'team' : 'teams'}
+              </Text>
             </Text>
             {ts.length === 0 ? (
               <Text style={styles.muted}>No teams yet.</Text>
             ) : (
               ts.map((t) => (
                 <View key={t.id} style={styles.teamRow}>
-                  {t.color ? (
-                    <View style={[styles.teamSwatch, { backgroundColor: t.color }]} />
-                  ) : (
-                    <View style={[styles.teamSwatch, { backgroundColor: '#cbd5e1' }]} />
-                  )}
+                  <View
+                    style={[
+                      styles.teamSwatch,
+                      { backgroundColor: t.color ?? '#cbd5e1' },
+                    ]}
+                  />
                   <Text style={styles.teamName}>{t.name}</Text>
                 </View>
               ))
@@ -294,6 +313,12 @@ function TeamsTab({ divisions, teams }: { divisions: Division[]; teams: Team[] }
       })}
     </View>
   );
+}
+
+function primaryPhase(division: Division): Phase | null {
+  const phases = (division.phases ?? []).slice().sort((a, b) => a.display_order - b.display_order);
+  if (phases.length === 0) return null;
+  return phases.find((p) => p.standings_mode === 'visible') ?? phases[0];
 }
 
 function StandingsTab({
@@ -310,55 +335,157 @@ function StandingsTab({
   if (divisions.length === 0) return <Empty text="No divisions yet." />;
   return (
     <View style={styles.tabContent}>
-      {divisions.map((d) => {
-        const divTeams = teams.filter((t) => t.age_group_id === d.id);
-        const divMatches = matches.filter((m) => m.age_group_id === d.id);
-        const rows = calculateStandings(divTeams, divMatches);
-        return (
-          <Link
-            key={d.id}
-            href={{
-              pathname: '/[tournamentSlug]/[day]/[divisionSlug]/index',
-              params: { tournamentSlug, day: d.day, divisionSlug: d.slug },
-            }}
-            asChild
-          >
-            <Pressable style={styles.standingsCard}>
-              <Text style={styles.divisionHeader}>
-                {d.name}
-                <Text style={styles.divisionHeaderMeta}>  ·  {capitalise(d.day)}</Text>
-              </Text>
-              {rows.length === 0 ? (
-                <Text style={styles.muted}>No teams yet.</Text>
-              ) : (
-                <View style={styles.miniTable}>
-                  <View style={[styles.miniRow, styles.miniHeaderRow]}>
-                    <Text style={[styles.miniCellPos, styles.miniHeader]}>#</Text>
-                    <Text style={[styles.miniCellName, styles.miniHeader]}>Team</Text>
-                    <Text style={[styles.miniCellNum, styles.miniHeader]}>P</Text>
-                    <Text style={[styles.miniCellNum, styles.miniHeader]}>GD</Text>
-                    <Text style={[styles.miniCellNum, styles.miniHeader]}>Pts</Text>
-                  </View>
-                  {rows.slice(0, 5).map((r) => (
-                    <View key={r.team.id} style={styles.miniRow}>
-                      <Text style={styles.miniCellPos}>{r.position}</Text>
-                      <Text style={styles.miniCellName} numberOfLines={1}>
-                        {r.team.name}
-                      </Text>
-                      <Text style={styles.miniCellNum}>{r.played}</Text>
-                      <Text style={styles.miniCellNum}>{signed(r.goal_difference)}</Text>
-                      <Text style={[styles.miniCellNum, styles.bold]}>{r.points}</Text>
-                    </View>
-                  ))}
-                  {rows.length > 5 ? (
-                    <Text style={styles.muted}>… {rows.length - 5} more — tap to view full table</Text>
-                  ) : null}
-                </View>
-              )}
-            </Pressable>
-          </Link>
-        );
-      })}
+      {divisions.map((d) => (
+        <DivisionStandingsCard
+          key={d.id}
+          tournamentSlug={tournamentSlug}
+          division={d}
+          teams={teams.filter((t) => t.age_group_id === d.id)}
+          matches={matches.filter((m) => m.age_group_id === d.id)}
+        />
+      ))}
+    </View>
+  );
+}
+
+function DivisionStandingsCard({
+  tournamentSlug,
+  division,
+  teams,
+  matches,
+}: {
+  tournamentSlug: string;
+  division: Division;
+  teams: Team[];
+  matches: Match[];
+}) {
+  const phase = primaryPhase(division);
+
+  const body = (() => {
+    if (!phase) return <Text style={styles.muted}>No phase set up yet.</Text>;
+
+    if (phase.phase_type === 'knockout') {
+      return (
+        <Text style={styles.muted}>
+          Knockout phase — open the division to see bracket fixtures.
+        </Text>
+      );
+    }
+
+    if (phase.standings_mode !== 'visible') {
+      return <Text style={styles.muted}>Standings hidden for this phase.</Text>;
+    }
+
+    const pools = (phase.pools ?? []).slice().sort((a, b) => a.display_order - b.display_order);
+    const showPerPool = pools.length > 1;
+    const scoring = phase.scoring_system ?? division.scoring_system;
+
+    if (showPerPool) {
+      return (
+        <View>
+          {pools.map((pool) => (
+            <PoolMiniTable
+              key={pool.id}
+              pool={pool}
+              teams={teamsForPool(pool, teams)}
+              matches={matches.filter((m) => m.pool_id === pool.id)}
+              scoring={scoring}
+            />
+          ))}
+        </View>
+      );
+    }
+
+    return (
+      <MiniStandings
+        rows={calculateStandings(teams, matches, scoring).slice(0, 5)}
+        totalCount={teams.length}
+      />
+    );
+  })();
+
+  return (
+    <Link
+      href={{
+        pathname: '/[tournamentSlug]/[day]/[divisionSlug]',
+        params: { tournamentSlug, day: division.day, divisionSlug: division.slug },
+      }}
+      asChild
+    >
+      <Pressable style={styles.standingsCard}>
+        <Text style={styles.divisionHeader}>
+          {division.name}
+          <Text style={styles.divisionHeaderMeta}>
+            {'  ·  '}
+            {capitalise(division.day)}
+            {phase ? `  ·  ${phaseTypeLabel(phase.phase_type)}` : ''}
+          </Text>
+        </Text>
+        {body}
+      </Pressable>
+    </Link>
+  );
+}
+
+function teamsForPool(pool: Pool, divisionTeams: Team[]): Team[] {
+  const teamIds = new Set((pool.pool_teams ?? []).map((pt) => pt.team_id));
+  if (teamIds.size === 0) return divisionTeams;
+  return divisionTeams.filter((t) => teamIds.has(t.id));
+}
+
+function PoolMiniTable({
+  pool,
+  teams,
+  matches,
+  scoring,
+}: {
+  pool: Pool;
+  teams: Team[];
+  matches: Match[];
+  scoring: Division['scoring_system'] | undefined;
+}) {
+  const rows = calculateStandings(teams, matches, scoring).slice(0, 4);
+  return (
+    <View style={styles.poolBlock}>
+      <Text style={styles.poolHeader}>{pool.name}</Text>
+      <MiniStandings rows={rows} totalCount={teams.length} />
+    </View>
+  );
+}
+
+function MiniStandings({
+  rows,
+  totalCount,
+}: {
+  rows: ReturnType<typeof calculateStandings>;
+  totalCount: number;
+}) {
+  if (rows.length === 0) {
+    return <Text style={styles.muted}>No teams yet.</Text>;
+  }
+  return (
+    <View style={styles.miniTable}>
+      <View style={[styles.miniRow, styles.miniHeaderRow]}>
+        <Text style={[styles.miniCellPos, styles.miniHeader]}>#</Text>
+        <Text style={[styles.miniCellName, styles.miniHeader]}>Team</Text>
+        <Text style={[styles.miniCellNum, styles.miniHeader]}>P</Text>
+        <Text style={[styles.miniCellNum, styles.miniHeader]}>GD</Text>
+        <Text style={[styles.miniCellNum, styles.miniHeader]}>Pts</Text>
+      </View>
+      {rows.map((r) => (
+        <View key={r.team.id} style={styles.miniRow}>
+          <Text style={styles.miniCellPos}>{r.position}</Text>
+          <Text style={styles.miniCellName} numberOfLines={1}>
+            {r.team.name}
+          </Text>
+          <Text style={styles.miniCellNum}>{r.played}</Text>
+          <Text style={styles.miniCellNum}>{signed(r.goal_difference)}</Text>
+          <Text style={[styles.miniCellNum, styles.bold]}>{r.points}</Text>
+        </View>
+      ))}
+      {totalCount > rows.length ? (
+        <Text style={styles.muted}>… tap for full table</Text>
+      ) : null}
     </View>
   );
 }
@@ -458,6 +585,21 @@ function Empty({ text }: { text: string }) {
   );
 }
 
+function phaseTypeLabel(t: Phase['phase_type']) {
+  switch (t) {
+    case 'round_robin':
+      return 'Round robin';
+    case 'group_stage':
+      return 'Group stage';
+    case 'knockout':
+      return 'Knockout';
+    case 'league':
+      return 'League';
+    case 'friendly':
+      return 'Friendlies';
+  }
+}
+
 function formatDateRange(start: string | null, end: string | null) {
   if (!start) return '';
   const s = new Date(start);
@@ -501,7 +643,12 @@ const styles = StyleSheet.create({
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   error: { color: '#b91c1c', paddingHorizontal: 16, paddingTop: 8 },
 
-  header: { padding: 20, backgroundColor: '#ffffff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
+  header: {
+    padding: 20,
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
   headerTitle: { fontSize: 22, fontWeight: '700', color: '#0f172a' },
   headerMeta: { marginTop: 4, color: '#475569', fontSize: 13 },
 
@@ -511,7 +658,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#e2e8f0',
   },
-  tabButton: { flex: 1, paddingVertical: 12, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  tabButton: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
   tabButtonActive: { borderBottomColor: '#0f172a' },
   tabLabel: { color: '#64748b', fontWeight: '500' },
   tabLabelActive: { color: '#0f172a', fontWeight: '700' },
@@ -562,6 +715,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e2e8f0',
   },
+  poolBlock: { marginTop: 8 },
+  poolHeader: { color: '#475569', fontWeight: '600', marginBottom: 4 },
+
   miniTable: {},
   miniRow: { flexDirection: 'row', paddingVertical: 6 },
   miniHeaderRow: { borderBottomWidth: 1, borderBottomColor: '#e2e8f0', marginBottom: 4 },

@@ -1,4 +1,4 @@
-import { Link, Stack } from 'expo-router';
+import { Link, Stack, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -15,6 +15,7 @@ import { supabase } from '../lib/supabase';
 import { venueLabel, type Tournament } from '../lib/types';
 
 export default function TournamentListScreen() {
+  const router = useRouter();
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -58,7 +59,16 @@ export default function TournamentListScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
-      <Stack.Screen options={{ title: 'Tournaments' }} />
+      <Stack.Screen
+        options={{
+          title: 'Tournaments',
+          headerRight: () => (
+            <Pressable onPress={() => router.push('/scan')} style={styles.headerBtn}>
+              <Text style={styles.headerBtnText}>Scan</Text>
+            </Pressable>
+          ),
+        }}
+      />
       <View style={styles.searchWrap}>
         <TextInput
           style={styles.search}
@@ -175,4 +185,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   retryText: { color: '#ffffff', fontWeight: '600' },
+  headerBtn: { paddingHorizontal: 12, paddingVertical: 6 },
+  headerBtnText: { color: '#ffffff', fontWeight: '600' },
 });

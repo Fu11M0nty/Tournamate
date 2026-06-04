@@ -15,6 +15,16 @@ export default function RootLayout() {
         }}
       >
         <Stack.Screen name="index" options={{ title: 'Tournamate' }} />
+        <Stack.Screen name="scan" options={{ title: 'Scan QR' }} />
+        <Stack.Screen name="[tournamentSlug]/index" options={{ title: 'Tournament' }} />
+        <Stack.Screen
+          name="[tournamentSlug]/[day]/[divisionSlug]/index"
+          options={{ title: 'Division' }}
+        />
+        <Stack.Screen
+          name="[tournamentSlug]/match/[matchId]"
+          options={{ title: 'Match' }}
+        />
       </Stack>
     </SafeAreaProvider>
   );
