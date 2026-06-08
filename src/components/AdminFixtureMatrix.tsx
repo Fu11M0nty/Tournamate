@@ -4,7 +4,7 @@ import { useMemo } from 'react'
 import TeamLogo from '@/components/TeamLogo'
 import { forfeitSide, pointsForMatch } from '@/lib/standings'
 import { formatKickoffTime } from '@/lib/time'
-import type { Match, Team } from '@/lib/types'
+import type { Match, ScoringSystem, Team } from '@/lib/types'
 
 interface AdminFixtureMatrixProps {
   teams: Team[]
@@ -13,6 +13,28 @@ interface AdminFixtureMatrixProps {
 }
 
 const BACK_TO_BACK_THRESHOLD_MS = 20 * 60 * 1000
+
+const DEFAULT_MATRIX_SCORING: ScoringSystem = {
+  id: 'default',
+  name: 'Fallback System',
+  sport_type: 'Netball',
+  win_pts: 5,
+  draw_pts: 3,
+  loss_pts: 0,
+  ot_win_pts: null,
+  so_win_pts: null,
+  bonus_loss_pts: 1,
+  bonus_loss_threshold_type: 'percentage',
+  bonus_loss_threshold_value: 50,
+  bonus_offense_pts: 0,
+  bonus_offense_threshold: null,
+  forfeit_win_pts: 5,
+  forfeit_loss_pts: 0,
+  forfeit_win_score_for: 5,
+  forfeit_win_score_against: 0,
+  tie_breaker_config: ['head_to_head', 'goal_difference', 'goals_for'],
+  created_at: '',
+}
 
 function formatKickoff(iso: string): string {
   return formatKickoffTime(iso)
@@ -31,6 +53,7 @@ export default function AdminFixtureMatrix({
   const matchesByPair = useMemo(() => {
     const map = new Map<string, Match[]>()
     for (const m of matches) {
+      if (!m.home_team_id || !m.away_team_id) continue
       const key = [m.home_team_id, m.away_team_id].sort().join('|')
       const arr = map.get(key) ?? []
       arr.push(m)
@@ -72,6 +95,7 @@ export default function AdminFixtureMatrix({
     const byTeam = new Map<string, Match[]>()
     for (const m of matches) {
       for (const tid of [m.home_team_id, m.away_team_id]) {
+        if (!tid) continue
         const arr = byTeam.get(tid) ?? []
         arr.push(m)
         byTeam.set(tid, arr)
@@ -102,7 +126,7 @@ export default function AdminFixtureMatrix({
   if (sortedTeams.length === 0) {
     return (
       <p className="rounded-lg border border-dashed border-zinc-300 bg-white p-6 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-400">
-        No teams in this age group.
+        No teams in this division.
       </p>
     )
   }
@@ -222,7 +246,7 @@ export default function AdminFixtureMatrix({
                   const adjRow = isForfeit ? rawRow : rawRow - 2 * rowLate
                   const adjCol = isForfeit ? rawCol : rawCol - 2 * colLate
                   // pointsForMatch(home, away) — passing row first means .home === row
-                  const base = pointsForMatch(adjRow, adjCol)
+                  const base = pointsForMatch(adjRow, adjCol, DEFAULT_MATRIX_SCORING)
                   const rowNetPoints =
                     base.home - (rowUmpireNoShow ? 1 : 0)
                   const pointsTone =

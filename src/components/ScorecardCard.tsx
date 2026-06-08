@@ -168,7 +168,7 @@ export default function ScorecardCard({
         height: '100%',
       }}
     >
-      {/* Header: age group + court/time + QR code */}
+      {/* Header: division + court/time + QR code */}
       <div
         style={{
           display: 'flex',

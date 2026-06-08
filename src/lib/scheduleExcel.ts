@@ -67,14 +67,14 @@ function buildGridSheet(
     if (!m.is_planned || !m.court || !m.kickoff_time) continue
     const timeHHMM = getLondonTimeHHmm(m.kickoff_time)
     const ag = agById.get(m.age_group_id)
-    const home = teamById.get(m.home_team_id)
-    const away = teamById.get(m.away_team_id)
-    if (!ag || !home || !away) continue
+    const home = m.home_team_id ? teamById.get(m.home_team_id) : null
+    const away = m.away_team_id ? teamById.get(m.away_team_id) : null
+    if (!ag) continue
     const shortId = matchShortId(m.id)
     const roundLabel = m.round_number != null ? ` R${m.round_number}` : ''
     cells.set(
       `${timeHHMM}|${m.court}`,
-      `${ag.name}${roundLabel}: ${home.name} v ${away.name} [${shortId}]`,
+      `${ag.name}${roundLabel}: ${home?.name ?? 'TBD'} v ${away?.name ?? 'TBD'} [${shortId}]`,
     )
   }
 
@@ -123,7 +123,7 @@ export async function exportSchedule(
     ['─────────────────────────────────────────────────────────────────────────'],
     ['FLAT LIST SHEETS (Saturday / Sunday)'],
     ['  • Edit ONLY these columns: Court, Time, Duration (min), Status'],
-    ['  • Do NOT change: Match ID, Age Group, Round, Home Team, Away Team'],
+    ['  • Do NOT change: Match ID, Division, Round, Home Team, Away Team'],
     ['  • Time format: HH:MM  (e.g. 09:30, 14:15)  — leave blank = unplanned'],
     ['  • Status: "scheduled"  or  "completed"'],
     [],
@@ -166,10 +166,10 @@ export async function exportSchedule(
     // ── Flat list sheet ──────────────────────────────────────────────────────
     const rows = dayMatches.map((m) => ({
       'Match ID': m.id,
-      'Age Group': agById.get(m.age_group_id)?.name ?? '',
+      Division: agById.get(m.age_group_id)?.name ?? '',
       'Round': m.round_number ?? '',
-      'Home Team': teamById.get(m.home_team_id)?.name ?? '',
-      'Away Team': teamById.get(m.away_team_id)?.name ?? '',
+      'Home Team': m.home_team_id ? teamById.get(m.home_team_id)?.name ?? '' : 'TBD',
+      'Away Team': m.away_team_id ? teamById.get(m.away_team_id)?.name ?? '' : 'TBD',
       'Court': m.court ?? '',
       'Time': m.is_planned && m.kickoff_time ? getLondonTimeHHmm(m.kickoff_time) : '',
       'Duration (min)': m.duration_minutes,
@@ -179,7 +179,7 @@ export async function exportSchedule(
     const ws = XLSX.utils.json_to_sheet(rows)
     ws['!cols'] = [
       { wch: 38 }, // Match ID
-      { wch: 16 }, // Age Group
+      { wch: 16 }, // Division
       { wch: 7 },  // Round
       { wch: 22 }, // Home Team
       { wch: 22 }, // Away Team

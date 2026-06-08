@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
-import { ensureRoundRobinMatches } from './matches'
+import { generateStructureFixtures } from './matches'
 
 export async function regenerateUnplannedFixtures(ageGroupId: string) {
   const cookieStore = await cookies()
@@ -22,7 +22,7 @@ export async function regenerateUnplannedFixtures(ageGroupId: string) {
             cookiesToSet.forEach(({ name, value, options }) => {
               cookieStore.set(name, value, options)
             })
-          } catch (error) {
+          } catch {
             // Ignore if called from a context where cookies cannot be set
           }
         },
@@ -42,8 +42,11 @@ export async function regenerateUnplannedFixtures(ageGroupId: string) {
     return { success: false, error: deleteError.message }
   }
 
-  // Step 2: Recreate the fixtures using the updated Circle Method algorithm
-  const { created, error: createError } = await ensureRoundRobinMatches(supabase as any, ageGroupId)
+  // Step 2: Recreate fixtures from the configured phase/pool/slot structure.
+  const { created, error: createError } = await generateStructureFixtures(
+    supabase as Parameters<typeof generateStructureFixtures>[0],
+    ageGroupId
+  )
 
   if (createError) {
     return { success: false, error: createError }

@@ -1,8 +1,10 @@
 import Link from 'next/link'
-import type { AgeGroup, Day } from '@/lib/types'
+import { labelForLegacyDay } from '@/lib/competitionDates'
+import type { AgeGroup, Day, Tournament } from '@/lib/types'
 
 interface DayTabsProps {
   tournamentSlug: string
+  tournament: Tournament
   days: AgeGroup[][]
   currentDay: Day
 }
@@ -12,7 +14,7 @@ const TABS: { day: Day; label: string }[] = [
   { day: 'sunday', label: 'Sunday' },
 ]
 
-export default function DayTabs({ tournamentSlug, days, currentDay }: DayTabsProps) {
+export default function DayTabs({ tournamentSlug, tournament, days, currentDay }: DayTabsProps) {
   const hasGroups = (day: Day) => {
     const idx = day === 'saturday' ? 0 : 1
     return (days[idx]?.length ?? 0) > 0
@@ -21,38 +23,49 @@ export default function DayTabs({ tournamentSlug, days, currentDay }: DayTabsPro
   return (
     <nav
       aria-label="Tournament day"
-      className="flex gap-2 border-b border-zinc-200 bg-white px-4 pt-3 dark:border-zinc-800 dark:bg-zinc-950"
+      className="flex items-center gap-3 border-b border-zinc-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-950"
     >
-      {TABS.map(({ day, label }) => {
-        const active = day === currentDay
-        const enabled = hasGroups(day)
-        const base =
-          'inline-flex items-center justify-center rounded-t-lg px-5 py-3 text-sm font-semibold tracking-wide transition-colors'
-        const classes = active
-          ? `${base} bg-tm-orange text-white shadow-sm`
-          : enabled
-            ? `${base} text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900`
-            : `${base} cursor-not-allowed text-zinc-300 dark:text-zinc-700`
+      <div className="inline-flex gap-1 rounded-full bg-zinc-100 p-1 dark:bg-zinc-900">
+        {TABS.map(({ day }) => {
+          const label = labelForLegacyDay(tournament, day)
+          const active = day === currentDay
+          const enabled = hasGroups(day)
 
-        if (!enabled) {
+          if (!enabled) {
+            return (
+              <span
+                key={day}
+                aria-disabled="true"
+                className="inline-flex cursor-not-allowed items-center rounded-full px-5 py-1.5 text-sm font-semibold text-zinc-300 dark:text-zinc-700"
+              >
+                {label}
+              </span>
+            )
+          }
+
+          if (active) {
+            return (
+              <span
+                key={day}
+                aria-current="page"
+                className="inline-flex items-center rounded-full bg-white px-5 py-1.5 text-sm font-bold text-tm-navy shadow-sm dark:bg-zinc-950 dark:text-white"
+              >
+                {label}
+              </span>
+            )
+          }
+
           return (
-            <span key={day} className={classes} aria-disabled="true">
+            <Link
+              key={day}
+              href={`/${tournamentSlug}/${day}`}
+              className="inline-flex items-center rounded-full px-5 py-1.5 text-sm font-semibold text-zinc-500 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+            >
               {label}
-            </span>
+            </Link>
           )
-        }
-
-        return (
-          <Link
-            key={day}
-            href={`/${tournamentSlug}/${day}`}
-            className={classes}
-            aria-current={active ? 'page' : undefined}
-          >
-            {label}
-          </Link>
-        )
-      })}
+        })}
+      </div>
     </nav>
   )
 }

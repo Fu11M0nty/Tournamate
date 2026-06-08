@@ -1,15 +1,19 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import toast from 'react-hot-toast'
 import AdminMatchList from '@/components/AdminMatchList'
 import AdminTeamList from '@/components/AdminTeamList'
 import AdminFixtureMatrix from '@/components/AdminFixtureMatrix'
 import AdminImport from '@/components/AdminImport'
 import AdminScheduleView from '@/components/AdminScheduleView'
-import AdminAgeGroupList from '@/components/AdminAgeGroupList'
+import AdminDivisionList from '@/components/AdminDivisionList'
 import AdminTournamentLanding from '@/components/AdminTournamentLanding'
+import AdminTournamentGeneral from '@/components/AdminTournamentGeneral'
+import AdminScoringList from '@/components/AdminScoringList'
+import AdminOfficiatingView from '@/components/AdminOfficiatingView'
+import AdminHelpView from '@/components/AdminHelpView'
 import QRScannerModal from '@/components/QRScannerModal'
 import AdminSidebar, { type AdminPanel } from '@/components/AdminSidebar'
 import AdminUserList from '@/components/AdminUserList'
@@ -17,6 +21,7 @@ import SnapshotView from '@/components/SnapshotView'
 import SnapshotDialog from '@/components/SnapshotDialog'
 import { createClient } from '@/lib/supabase'
 import { useAdminAuth } from '@/lib/auth-context'
+import { labelForLegacyDay, legacyDaysForTournament } from '@/lib/competitionDates'
 import type { AgeGroup, Day, Match, Team, Tournament } from '@/lib/types'
 
 type AdminView = 'matches' | 'matrix'
@@ -27,10 +32,10 @@ const VIEW_LABELS: Record<AdminView, string> = {
 }
 
 export default function AdminPage() {
-  const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
-  const { role } = useAdminAuth()
+  const { userId, role, isApproved } = useAdminAuth()
   const isSuperAdmin = role === 'superadmin'
+  const isAuthorizedAdmin = Boolean(userId && role && isApproved)
 
   // null = landing; set = inside that tournament
   const [tournamentId, setTournamentId] = useState<string | null>(null)
@@ -45,10 +50,9 @@ export default function AdminPage() {
   const [dayMatches, setDayMatches] = useState<Match[]>([])
   const [loadingGroups, setLoadingGroups] = useState(false)
   const [loadingMatches, setLoadingMatches] = useState(false)
-  const [signingOut, setSigningOut] = useState(false)
   const [backingUp, setBackingUp] = useState(false)
   const [view, setView] = useState<AdminView>('matches')
-  const [activePanel, setActivePanel] = useState<AdminPanel>('match-entry')
+  const [activePanel, setActivePanel] = useState<AdminPanel>('general')
   const [ageGroupsTeamsId, setAgeGroupsTeamsId] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showQRScanner, setShowQRScanner] = useState(false)
@@ -99,8 +103,9 @@ export default function AdminPage() {
   }, [supabase])
 
   useEffect(() => {
+    if (!isAuthorizedAdmin) return
     loadTournaments()
-  }, [loadTournaments])
+  }, [isAuthorizedAdmin, loadTournaments])
 
   const loadAgeGroups = useCallback(async () => {
     if (!tournamentId || tournamentId === '__users__') {
@@ -116,7 +121,7 @@ export default function AdminPage() {
       .order('display_order', { ascending: true })
 
     if (error) {
-      toast.error(`Could not load age groups: ${error.message}`)
+      toast.error(`Could not load divisions: ${error.message}`)
       setLoadingGroups(false)
       return
     }
@@ -242,21 +247,9 @@ export default function AdminPage() {
     toast.success(`Snapshot saved — ${count} match${count !== 1 ? 'es' : ''} captured`)
   }
 
-  async function handleSignOut() {
-    setSigningOut(true)
-    const { error } = await supabase.auth.signOut()
-    if (error) {
-      toast.error(`Sign out failed: ${error.message}`)
-      setSigningOut(false)
-      return
-    }
-    router.push('/admin/login')
-    router.refresh()
-  }
-
   function handleEnterTournament(t: Tournament) {
     setTournamentId(t.id)
-    setActivePanel('match-entry')
+    setActivePanel('general')
     setView('matches')
     setDay('saturday')
     setCurrentGroupId(null)
@@ -274,8 +267,35 @@ export default function AdminPage() {
   }
 
   const activeTournament = tournaments.find((t) => t.id === tournamentId) ?? null
+  const dayOptions = activeTournament
+    ? Array.from(
+        new Set([
+          ...legacyDaysForTournament(activeTournament),
+          ...ageGroups.map((group) => group.day),
+        ])
+      )
+    : (['saturday', 'sunday'] as Day[])
 
   // ── Inactivity timeout ────────────────────────────────────────────────────
+  if (!isAuthorizedAdmin) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-zinc-950 px-6 py-12">
+        <div className="w-full max-w-md rounded-xl border border-red-900/60 bg-zinc-900 p-6 text-center shadow-xl">
+          <h1 className="text-xl font-bold text-zinc-50">Admin access required</h1>
+          <p className="mt-2 text-sm leading-relaxed text-zinc-400">
+            You need an approved organiser account before the admin console can be opened.
+          </p>
+          <Link
+            href="/admin/login"
+            className="mt-6 inline-flex rounded-md bg-mk-red px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-mk-red-dark"
+          >
+            Go to sign in
+          </Link>
+        </div>
+      </main>
+    )
+  }
+
   if (inactivityLoggedOut) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/75 backdrop-blur-sm">
@@ -289,12 +309,12 @@ export default function AdminPage() {
           <p className="mt-2 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
             You were automatically signed out after 10 minutes of inactivity to keep your account secure.
           </p>
-          <a
+          <Link
             href="/admin/login"
             className="mt-6 inline-flex items-center gap-2 rounded-full bg-tm-orange px-6 py-2.5 text-sm font-bold uppercase tracking-wider text-white shadow-md shadow-tm-orange/30 transition-all hover:-translate-y-0.5 hover:bg-tm-orange-dark"
           >
             Sign in again
-          </a>
+          </Link>
         </div>
       </div>
     )
@@ -471,7 +491,7 @@ export default function AdminPage() {
                         <line x1="19" y1="12" x2="5" y2="12" />
                         <polyline points="12 19 5 12 12 5" />
                       </svg>
-                      Back to Age Groups
+                      Back to Divisions
                     </button>
                     <span className="text-sm font-bold text-zinc-900 dark:text-zinc-50">
                       {ageGroups.find((g) => g.id === ageGroupsTeamsId)?.name ?? ''} — Add/Edit Teams
@@ -485,9 +505,9 @@ export default function AdminPage() {
                   />
                 </>
               ) : (
-                <AdminAgeGroupList
+                <AdminDivisionList
                   tournament={activeTournament}
-                  ageGroups={ageGroups}
+                  divisions={ageGroups}
                   onChanged={() => {
                     loadAgeGroups()
                     loadMatches()
@@ -505,6 +525,28 @@ export default function AdminPage() {
                 Tournament not found.
               </p>
             )}
+          </section>
+        ) : activePanel === 'general' ? (
+          <section className="px-4 pt-5">
+            {activeTournament ? (
+              <AdminTournamentGeneral
+                tournament={activeTournament}
+                onTournamentChanged={() => {
+                  loadTournaments()
+                  loadAgeGroups()
+                  loadMatches()
+                  loadDayMatches()
+                }}
+              />
+            ) : (
+              <p className="rounded-lg border border-dashed border-zinc-300 bg-white p-6 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-400">
+                Tournament not found.
+              </p>
+            )}
+          </section>
+        ) : activePanel === 'scoring' ? (
+          <section className="px-4 pt-5">
+            <AdminScoringList />
           </section>
         ) : activePanel === 'snapshots' ? (
           <section className="px-4 pt-5">
@@ -555,6 +597,26 @@ export default function AdminPage() {
             </div>
             <AdminUserList />
           </section>
+        ) : activePanel === 'officiating' ? (
+          <section className="px-4 pt-5">
+            {activeTournament ? (
+              <AdminOfficiatingView tournament={activeTournament} />
+            ) : (
+              <p className="rounded-lg border border-dashed border-zinc-300 bg-white p-6 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-400">
+                Tournament not found.
+              </p>
+            )}
+          </section>
+        ) : activePanel === 'help' ? (
+          <section className="px-4 pt-5">
+            {activeTournament ? (
+              <AdminHelpView />
+            ) : (
+              <p className="rounded-lg border border-dashed border-zinc-300 bg-white p-6 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-400">
+                Tournament not found.
+              </p>
+            )}
+          </section>
         ) : (
           <>
             {/* Day tabs */}
@@ -562,7 +624,7 @@ export default function AdminPage() {
               aria-label="Tournament day"
               className="flex gap-2 border-b border-zinc-200 bg-white px-4 pt-3 dark:border-zinc-800 dark:bg-zinc-950"
             >
-              {(['saturday', 'sunday'] as Day[]).map((d) => {
+              {dayOptions.map((d) => {
                 const active = d === day
                 return (
                   <button
@@ -572,26 +634,26 @@ export default function AdminPage() {
                     aria-current={active ? 'page' : undefined}
                     className={
                       active
-                        ? 'inline-flex items-center justify-center rounded-t-lg bg-mk-red px-5 py-3 text-sm font-semibold tracking-wide text-white shadow-sm'
-                        : 'inline-flex items-center justify-center rounded-t-lg px-5 py-3 text-sm font-semibold tracking-wide text-zinc-600 transition-colors hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900'
+                        ? 'inline-flex items-center justify-center rounded-t-lg bg-zinc-900 px-5 py-3 text-sm font-semibold tracking-wide text-white shadow-sm dark:bg-zinc-100 dark:text-zinc-900'
+                        : 'inline-flex items-center justify-center rounded-t-lg px-5 py-3 text-sm font-semibold tracking-wide text-zinc-500 transition-colors hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800'
                     }
                   >
-                    {d === 'saturday' ? 'Saturday' : 'Sunday'}
+                    {activeTournament ? labelForLegacyDay(activeTournament, d) : d}
                   </button>
                 )
               })}
             </nav>
 
-            {/* Age group tabs */}
+            {/* Division tabs */}
             <nav
-              aria-label="Age group"
+              aria-label="Division"
               className="overflow-x-auto whitespace-nowrap border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950"
             >
               {groupsForDay.length === 0 ? (
                 <div className="px-4 py-3 text-sm text-zinc-500 dark:text-zinc-400">
                   {loadingGroups
-                    ? 'Loading age groups…'
-                    : 'No age groups scheduled for this day.'}
+                    ? 'Loading divisions…'
+                    : 'No divisions scheduled for this day.'}
                 </div>
               ) : (
                 <ul className="flex w-max gap-1 px-4 py-2">
@@ -618,6 +680,56 @@ export default function AdminPage() {
               )}
             </nav>
 
+            {/* Operational stats strip */}
+            {dayMatches.length > 0 && (
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-zinc-200 bg-zinc-50/70 px-4 py-2 dark:border-zinc-800 dark:bg-zinc-900/30">
+                {(
+                  [
+                    {
+                      label: 'Unscheduled',
+                      value: dayMatches.filter((m) => !m.is_planned).length,
+                      warn: dayMatches.filter((m) => !m.is_planned).length > 0,
+                    },
+                    {
+                      label: 'No court',
+                      value: dayMatches.filter((m) => m.is_planned && !m.court).length,
+                      warn: dayMatches.filter((m) => m.is_planned && !m.court).length > 0,
+                    },
+                    {
+                      label: 'Results in',
+                      value: `${dayMatches.filter((m) => m.status === 'completed').length} / ${dayMatches.filter((m) => m.is_planned).length}`,
+                      warn: false,
+                    },
+                    {
+                      label: 'No officials',
+                      value: dayMatches.filter(
+                        (m) => m.is_planned && m.status === 'scheduled' && (!m.umpire_assignments || m.umpire_assignments.length === 0)
+                      ).length,
+                      warn: false,
+                    },
+                  ] as { label: string; value: number | string; warn: boolean }[]
+                ).map(({ label, value, warn }, i) => (
+                  <span key={label} className="flex items-center gap-1.5">
+                    {i > 0 && (
+                      <span className="h-3 w-px bg-zinc-300 dark:bg-zinc-700" aria-hidden="true" />
+                    )}
+                    <span
+                      className={`text-xs font-bold tabular-nums ${
+                        warn && value !== 0
+                          ? 'text-amber-600 dark:text-amber-400'
+                          : 'text-zinc-700 dark:text-zinc-300'
+                      }`}
+                    >
+                      {value}
+                    </span>
+                    <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                      {label}
+                    </span>
+                  </span>
+                ))}
+              </div>
+            )}
+
             <section className="px-4 pt-5">
               {currentGroup ? (
                 <>
@@ -641,8 +753,8 @@ export default function AdminPage() {
                             onClick={() => setView(v)}
                             className={
                               active
-                                ? 'rounded bg-mk-red px-3 py-1 text-xs font-semibold text-white'
-                                : 'rounded px-3 py-1 text-xs font-semibold text-zinc-600 transition-colors hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800'
+                                ? 'rounded bg-zinc-900 px-3 py-1 text-xs font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900'
+                                : 'rounded px-3 py-1 text-xs font-semibold text-zinc-500 transition-colors hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800'
                             }
                           >
                             {VIEW_LABELS[v]}
@@ -661,6 +773,7 @@ export default function AdminPage() {
                         matches={matches}
                         teams={teams}
                         ageGroupName={currentGroup.name}
+                        tournamentId={activeTournament?.id}
                         onSaved={handleSaved}
                       />
                       <div className="mt-6 flex justify-end border-t border-zinc-200 pt-4 dark:border-zinc-800">
@@ -697,7 +810,7 @@ export default function AdminPage() {
               ) : (
                 !loadingGroups && (
                   <p className="rounded-lg border border-dashed border-zinc-300 bg-white p-6 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-400">
-                    Select a day with scheduled age groups.
+                    Select a day with scheduled divisions.
                   </p>
                 )
               )}

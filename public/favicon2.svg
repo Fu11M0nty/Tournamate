@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="6" fill="#1a2d4f"/>
+  <g transform="translate(1,0)">
+    <!-- T stem — behind M, pronounced S-curve -->
+    <path d="M 15,10 C 9,16 21,22 15,28"
+      fill="none" stroke="#f47c20" stroke-width="5" stroke-linecap="round"/>
+    <!-- M left vertical — bows outward -->
+    <path d="M 5,10 C 2,16 2,23 5,28"
+      fill="none" stroke="#4a9fd4" stroke-width="4" stroke-linecap="round"/>
+    <!-- M right vertical — bows outward -->
+    <path d="M 25,10 C 28,16 28,23 25,28"
+      fill="none" stroke="#4a9fd4" stroke-width="4" stroke-linecap="round"/>
+    <!-- M left V-stroke — dramatic inward sweep -->
+    <path d="M 5,10 C 14,8 15,14 15,19"
+      fill="none" stroke="#4a9fd4" stroke-width="4" stroke-linecap="round"/>
+    <!-- M right V-stroke — dramatic inward sweep -->
+    <path d="M 25,10 C 16,8 15,14 15,19"
+      fill="none" stroke="#4a9fd4" stroke-width="4" stroke-linecap="round"/>
+    <!-- T crossbar — deeply arched, in front of everything -->
+    <path d="M 2,11 C 7,3 23,3 28,11"
+      fill="none" stroke="#f47c20" stroke-width="5" stroke-linecap="round"/>
+  </g>
+</svg>
