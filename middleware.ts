@@ -31,21 +31,23 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl
 
+  if (pathname === '/admin/signup' || pathname.startsWith('/admin/signup/')) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/admin/login'
+    url.searchParams.set('signup', 'disabled')
+    return NextResponse.redirect(url)
+  }
+
   // Routes that don't require an active session
   const isPublicAdminPath =
     pathname === '/admin/login' ||
-    pathname === '/admin/signup' ||
-    pathname === '/admin/confirm-pending'
+    pathname === '/admin/confirm-pending' ||
+    pathname === '/admin/access-denied'
 
   if (!user && !isPublicAdminPath) {
     const url = request.nextUrl.clone()
     url.pathname = '/admin/login'
-    return NextResponse.redirect(url)
-  }
-
-  if (user && pathname === '/admin/login') {
-    const url = request.nextUrl.clone()
-    url.pathname = '/admin'
+    url.searchParams.set('next', `${pathname}${request.nextUrl.search}`)
     return NextResponse.redirect(url)
   }
 
@@ -57,7 +59,40 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
+  if (user) {
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('role, is_approved')
+      .eq('id', user.id)
+      .single()
+
+    const isAdminRole =
+      profile?.role === 'superadmin' || profile?.role === 'tournament_admin'
+    const isApproved = profile?.is_approved === true
+    const isAuthorizedAdmin = isAdminRole && isApproved
+
+    if (!isAuthorizedAdmin && !isPublicAdminPath) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/admin/access-denied'
+      url.search = ''
+      return NextResponse.redirect(url)
+    }
+
+    if (pathname === '/admin/login') {
+      const redirectPath = isAuthorizedAdmin ? safeNextPath(request) : '/admin/access-denied'
+      return NextResponse.redirect(new URL(redirectPath, request.url))
+    }
+  }
+
   return response
+}
+
+function safeNextPath(request: NextRequest) {
+  const nextPath = request.nextUrl.searchParams.get('next')
+  if (!nextPath || !nextPath.startsWith('/admin')) return '/admin'
+  if (nextPath.startsWith('/admin/login') || nextPath.startsWith('/admin/signup')) return '/admin'
+  if (nextPath.startsWith('//') || nextPath.includes('://')) return '/admin'
+  return nextPath
 }
 
 export const config = {

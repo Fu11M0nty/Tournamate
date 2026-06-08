@@ -46,6 +46,7 @@ export interface AutoPlanMatch {
   homeTeamId: string
   awayTeamId: string
   durationMinutes: number
+  notBeforeMin?: number | null
 }
 
 export interface AutoPlanLock {
@@ -168,7 +169,8 @@ export function autoPlan(input: AutoPlanInput): AutoPlanResult {
     const dur = durationCeil(m.durationMinutes)
     let count = 0
     for (const c of courts) {
-      if (c.endMin - c.startMin >= dur) count++
+      const startMin = Math.max(c.startMin, m.notBeforeMin ?? -Infinity)
+      if (c.endMin - startMin >= dur) count++
     }
     return count
   }
@@ -220,6 +222,16 @@ export function autoPlan(input: AutoPlanInput): AutoPlanResult {
     return best
   }
 
+  function earliestMatchReleaseAfter(t: number): number | null {
+    let best: number | null = null
+    for (const m of remaining) {
+      const x = m.notBeforeMin
+      if (x === null || x === undefined) continue
+      if (x > t && (best === null || x < best)) best = x
+    }
+    return best
+  }
+
   let roundStart = tickStart
   let safetyTicks = 10_000 // hard upper bound to prevent runaway loops
 
@@ -238,10 +250,11 @@ export function autoPlan(input: AutoPlanInput): AutoPlanResult {
     if (freeCourts.length === 0) {
       const evt = nextEventAfter(roundStart)
       const rel = earliestBackToBackReleaseAfter(roundStart)
+      const dep = earliestMatchReleaseAfter(roundStart)
       const next =
-        evt !== null && rel !== null
-          ? Math.min(evt, rel)
-          : (evt ?? rel)
+        [evt, rel, dep]
+          .filter((value): value is number => value !== null)
+          .sort((a, b) => a - b)[0] ?? null
       if (next === null || next <= roundStart) break
       roundStart = next
       continue
@@ -270,6 +283,8 @@ export function autoPlan(input: AutoPlanInput): AutoPlanResult {
         const dur = durationCeil(m.durationMinutes)
         const end = roundStart + dur
 
+        if (m.notBeforeMin !== null && m.notBeforeMin !== undefined && roundStart < m.notBeforeMin)
+          continue
         if (end > court.endMin) continue
         const arr = occupancy.get(court.name) ?? []
         if (!isFree(arr, roundStart, end)) continue
@@ -346,10 +361,11 @@ export function autoPlan(input: AutoPlanInput): AutoPlanResult {
     if (placedThisRound.length === 0) {
       const evt = nextEventAfter(roundStart)
       const rel = earliestBackToBackReleaseAfter(roundStart)
+      const dep = earliestMatchReleaseAfter(roundStart)
       const next =
-        evt !== null && rel !== null
-          ? Math.min(evt, rel)
-          : (evt ?? rel)
+        [evt, rel, dep]
+          .filter((value): value is number => value !== null)
+          .sort((a, b) => a - b)[0] ?? null
       if (next === null || next <= roundStart) break
       roundStart = next
       continue

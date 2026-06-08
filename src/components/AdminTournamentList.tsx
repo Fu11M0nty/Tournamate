@@ -166,7 +166,7 @@ export default function AdminTournamentList({
       {pendingDelete && (
         <ConfirmDialog
           title={`Delete "${pendingDelete.name}"?`}
-          message={`This will permanently delete the tournament and ALL its age groups, teams and matches.`}
+          message={`This will permanently delete the tournament and ALL its divisions, teams and matches.`}
           confirmLabel="Delete tournament"
           onConfirm={() => confirmDelete(pendingDelete)}
           onCancel={() => setPendingDelete(null)}
@@ -175,3 +175,4 @@ export default function AdminTournamentList({
     </div>
   )
 }
+

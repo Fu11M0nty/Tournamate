@@ -3,7 +3,6 @@
 import { useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import { createClient } from '@/lib/supabase'
-import { ensureRoundRobinMatches } from '@/lib/matches'
 import TeamLogo from './TeamLogo'
 import type { Team } from '@/lib/types'
 
@@ -135,22 +134,7 @@ export default function TeamEditForm({
       return
     }
 
-    if (isCreate) {
-      const r = await ensureRoundRobinMatches(supabase, ageGroupId)
-      if (r.error) {
-        toast.error(
-          `Team added, but fixtures could not be generated: ${r.error}`
-        )
-      } else if (r.created > 0) {
-        toast.success(
-          `Team added · ${r.created} fixture${r.created === 1 ? '' : 's'} created (unplanned)`
-        )
-      } else {
-        toast.success('Team added')
-      }
-    } else {
-      toast.success('Team saved')
-    }
+    toast.success(isCreate ? 'Team added' : 'Team saved')
     onSave()
   }
 

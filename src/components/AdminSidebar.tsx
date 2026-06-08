@@ -2,7 +2,7 @@
 
 import type { UserRole } from '@/lib/types'
 
-export type AdminPanel = 'match-entry' | 'schedule' | 'age-groups' | 'import' | 'snapshots' | 'users'
+export type AdminPanel = 'general' | 'match-entry' | 'schedule' | 'age-groups' | 'scoring' | 'import' | 'snapshots' | 'users' | 'officiating' | 'help'
 
 interface AdminSidebarProps {
   isOpen: boolean
@@ -14,7 +14,6 @@ interface AdminSidebarProps {
   backingUp: boolean
   role: UserRole | null
 }
-
 function NavItem({
   label,
   icon,
@@ -33,8 +32,8 @@ function NavItem({
       className={[
         'flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
         active
-          ? 'bg-mk-red-soft text-mk-red'
-          : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100',
+          ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50'
+          : 'text-zinc-500 hover:bg-zinc-50 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100',
       ].join(' ')}
     >
       {icon}
@@ -42,7 +41,6 @@ function NavItem({
     </button>
   )
 }
-
 function ActionNavItem({
   label,
   icon,
@@ -63,7 +61,6 @@ function ActionNavItem({
     </button>
   )
 }
-
 export default function AdminSidebar({
   isOpen,
   onClose,
@@ -108,7 +105,7 @@ export default function AdminSidebar({
               className={[
                 'mt-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
                 isSuperAdmin
-                  ? 'bg-mk-red-soft text-mk-red'
+                  ? 'bg-tm-navy/10 text-tm-navy dark:bg-white/10 dark:text-white'
                   : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400',
               ].join(' ')}
             >
@@ -138,11 +135,94 @@ export default function AdminSidebar({
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3">
-        <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-400 dark:text-zinc-500">
-          Fixture View
-        </p>
+      <nav className="flex-1 overflow-y-auto px-2 py-3">
 
+        {/* Setup */}
+        <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-400 dark:text-zinc-500">
+          Setup
+        </p>
+        <NavItem
+          label="General"
+          active={activePanel === 'general'}
+          onClick={() => onNavigate('general')}
+          icon={
+            <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+              <path d="M4.93 4.93a10 10 0 0 0 0 14.14" />
+            </svg>
+          }
+        />
+        <NavItem
+          label="Divisions"
+          active={activePanel === 'age-groups'}
+          onClick={() => onNavigate('age-groups')}
+          icon={
+            <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="7" height="7" rx="1" />
+              <rect x="14" y="3" width="7" height="7" rx="1" />
+              <rect x="3" y="14" width="7" height="7" rx="1" />
+              <rect x="14" y="14" width="7" height="7" rx="1" />
+            </svg>
+          }
+        />
+        <NavItem
+          label="Scoring"
+          active={activePanel === 'scoring'}
+          onClick={() => onNavigate('scoring')}
+          icon={
+            <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+            </svg>
+          }
+        />
+        <NavItem
+          label="Import"
+          active={activePanel === 'import'}
+          onClick={() => onNavigate('import')}
+          icon={
+            <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+          }
+        />
+
+        {/* Schedule */}
+        <p className="px-3 pb-1 pt-4 text-[10px] font-semibold uppercase tracking-widest text-zinc-400 dark:text-zinc-500">
+          Schedule
+        </p>
+        <NavItem
+          label="Schedule"
+          active={activePanel === 'schedule'}
+          onClick={() => onNavigate('schedule')}
+          icon={
+            <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+              <line x1="16" y1="2" x2="16" y2="6" />
+              <line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+            </svg>
+          }
+        />
+        <NavItem
+          label="Officiating"
+          active={activePanel === 'officiating'}
+          onClick={() => onNavigate('officiating')}
+          icon={
+            <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="8" r="4" />
+              <path d="M6 20v-2a6 6 0 0 1 12 0v2" />
+              <path d="M15 13l2 2 4-4" />
+            </svg>
+          }
+        />
+
+        {/* Match Day */}
+        <p className="px-3 pb-1 pt-4 text-[10px] font-semibold uppercase tracking-widest text-zinc-400 dark:text-zinc-500">
+          Match Day
+        </p>
         <NavItem
           label="Match Entry"
           active={activePanel === 'match-entry'}
@@ -154,7 +234,6 @@ export default function AdminSidebar({
             </svg>
           }
         />
-
         <ActionNavItem
           label="Scan QR"
           onClick={onScanQR}
@@ -171,49 +250,6 @@ export default function AdminSidebar({
             </svg>
           }
         />
-
-        <p className="px-3 pb-1 pt-4 text-[10px] font-semibold uppercase tracking-widest text-zinc-400 dark:text-zinc-500">
-          Manage
-        </p>
-
-        <NavItem
-          label="Schedule"
-          active={activePanel === 'schedule'}
-          onClick={() => onNavigate('schedule')}
-          icon={
-            <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-              <line x1="16" y1="2" x2="16" y2="6" />
-              <line x1="8" y1="2" x2="8" y2="6" />
-              <line x1="3" y1="10" x2="21" y2="10" />
-            </svg>
-          }
-        />
-        <NavItem
-          label="Age Groups"
-          active={activePanel === 'age-groups'}
-          onClick={() => onNavigate('age-groups')}
-          icon={
-            <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-              <circle cx="9" cy="7" r="4" />
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-            </svg>
-          }
-        />
-        <NavItem
-          label="Bulk Import"
-          active={activePanel === 'import'}
-          onClick={() => onNavigate('import')}
-          icon={
-            <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="17 8 12 3 7 8" />
-              <line x1="12" y1="3" x2="12" y2="15" />
-            </svg>
-          }
-        />
         <NavItem
           label="Snapshots"
           active={activePanel === 'snapshots'}
@@ -227,26 +263,38 @@ export default function AdminSidebar({
           }
         />
 
+        {/* Support */}
+        <p className="px-3 pb-1 pt-4 text-[10px] font-semibold uppercase tracking-widest text-zinc-400 dark:text-zinc-500">
+          Support
+        </p>
+        <NavItem
+          label="Help"
+          active={activePanel === 'help'}
+          onClick={() => onNavigate('help')}
+          icon={
+            <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+          }
+        />
         {isSuperAdmin && (
-          <>
-            <p className="px-3 pb-1 pt-4 text-[10px] font-semibold uppercase tracking-widest text-zinc-400 dark:text-zinc-500">
-              Admin
-            </p>
-            <NavItem
-              label="Users"
-              active={activePanel === 'users'}
-              onClick={() => onNavigate('users')}
-              icon={
-                <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                  <circle cx="9" cy="7" r="4" />
-                  <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                  <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                </svg>
-              }
-            />
-          </>
+          <NavItem
+            label="Users"
+            active={activePanel === 'users'}
+            onClick={() => onNavigate('users')}
+            icon={
+              <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+              </svg>
+            }
+          />
         )}
+
       </nav>
     </aside>
   )

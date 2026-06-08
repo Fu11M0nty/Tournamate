@@ -6,12 +6,14 @@ import type { UserRole } from './types'
 interface AdminAuthContextValue {
   userId: string | null
   role: UserRole | null
+  isApproved: boolean
   isSuperAdmin: boolean
 }
 
 const AdminAuthContext = createContext<AdminAuthContextValue>({
   userId: null,
   role: null,
+  isApproved: false,
   isSuperAdmin: false,
 })
 
@@ -19,6 +21,7 @@ interface AdminAuthProviderProps {
   children: React.ReactNode
   initialUserId: string | null
   initialRole: UserRole | null
+  initialIsApproved: boolean
 }
 
 /**
@@ -29,12 +32,14 @@ export function AdminAuthProvider({
   children,
   initialUserId,
   initialRole,
+  initialIsApproved,
 }: AdminAuthProviderProps) {
   return (
     <AdminAuthContext.Provider
       value={{
         userId: initialUserId,
         role: initialRole,
+        isApproved: initialIsApproved,
         isSuperAdmin: initialRole === 'superadmin',
       }}
     >

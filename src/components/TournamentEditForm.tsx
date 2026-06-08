@@ -24,8 +24,6 @@ export default function TournamentEditForm({
   const [name, setName] = useState(tournament?.name ?? '')
   const [slug, setSlug] = useState(tournament?.slug ?? '')
   const [slugTouched, setSlugTouched] = useState(mode === 'edit')
-  const [startDate, setStartDate] = useState(tournament?.start_date ?? '')
-  const [endDate, setEndDate] = useState(tournament?.end_date ?? '')
   const [status, setStatus] = useState<TournamentStatus>(
     tournament?.status ?? 'upcoming'
   )
@@ -33,8 +31,6 @@ export default function TournamentEditForm({
     String(tournament?.display_order ?? 0)
   )
   const [saving, setSaving] = useState(false)
-
-  const supabase = createClient()
 
   function handleNameChange(value: string) {
     setName(value)
@@ -59,20 +55,21 @@ export default function TournamentEditForm({
       return
     }
 
-    const basePayload = {
+    const payload = {
       name: name.trim(),
       slug: trimmedSlug,
-      start_date: startDate || null,
-      end_date: endDate || null,
       status,
       display_order: order,
     }
 
     setSaving(true)
+    const supabase = createClient()
 
     let data, error
     if (mode === 'create') {
-      const { data: { user } } = await supabase.auth.getUser()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
       if (!user) {
         toast.error('Not authenticated')
         setSaving(false)
@@ -80,15 +77,16 @@ export default function TournamentEditForm({
       }
       ;({ data, error } = await supabase
         .from('tournaments')
-        .insert({ ...basePayload, created_by: user.id })
+        .insert({ ...payload, created_by: user.id })
         .select())
     } else {
       ;({ data, error } = await supabase
         .from('tournaments')
-        .update(basePayload)
+        .update(payload)
         .eq('id', tournament!.id)
         .select())
     }
+
     setSaving(false)
 
     if (error) {
@@ -103,6 +101,7 @@ export default function TournamentEditForm({
       )
       return
     }
+
     toast.success(mode === 'create' ? 'Tournament created' : 'Tournament saved')
     onSaved()
   }
@@ -117,7 +116,7 @@ export default function TournamentEditForm({
         if (e.target === e.currentTarget) onCancel()
       }}
     >
-      <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
+      <div className="w-full max-w-lg rounded-xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
         <header className="mb-4">
           <h2
             id="tournament-edit-title"
@@ -125,6 +124,9 @@ export default function TournamentEditForm({
           >
             {mode === 'create' ? 'New tournament' : 'Edit tournament'}
           </h2>
+          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+            Dates, venues, sport and scoring defaults are managed inside the tournament General section.
+          </p>
         </header>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -166,41 +168,8 @@ export default function TournamentEditForm({
               className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-mk-red focus:outline-none focus:ring-1 focus:ring-mk-red dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
             />
             <p className="mt-1 text-[10px] text-zinc-500 dark:text-zinc-400">
-              Public URL: <code>/{slug || '…'}</code>
+              Public URL: <code>/{slug || '...'}</code>
             </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label
-                htmlFor="t-start"
-                className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-              >
-                Start date
-              </label>
-              <input
-                id="t-start"
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-mk-red focus:outline-none focus:ring-1 focus:ring-mk-red dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="t-end"
-                className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-              >
-                End date
-              </label>
-              <input
-                id="t-end"
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-mk-red focus:outline-none focus:ring-1 focus:ring-mk-red dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
-              />
-            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -256,7 +225,7 @@ export default function TournamentEditForm({
               disabled={saving}
               className="flex-1 rounded-md bg-mk-red px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-mk-red-dark disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {saving ? 'Saving…' : 'Save'}
+              {saving ? 'Saving...' : 'Save'}
             </button>
           </div>
         </form>

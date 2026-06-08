@@ -6,7 +6,7 @@ import type { Day } from '@/lib/types'
 
 interface PrintButtonProps {
   tournamentSlug: string
-  ageGroupName: string
+  divisionName: string
   day: Day
   label?: string
 }
@@ -22,7 +22,7 @@ function sanitizeFilenameSegment(s: string): string {
 
 export default function PrintButton({
   tournamentSlug,
-  ageGroupName,
+  divisionName,
   day,
   label = 'Download PDF',
 }: PrintButtonProps) {
@@ -119,7 +119,7 @@ export default function PrintButton({
       const dayLabel = day === 'saturday' ? 'Saturday' : 'Sunday'
       const filename = `MK-Netters-and-MK-Dons-${sanitizeFilenameSegment(
         tournamentSlug
-      )}-${dayLabel}-${sanitizeFilenameSegment(ageGroupName)}.pdf`
+      )}-${dayLabel}-${sanitizeFilenameSegment(divisionName)}.pdf`
       pdf.save(filename)
     } catch (err) {
       toast.error(
@@ -138,7 +138,7 @@ export default function PrintButton({
       type="button"
       onClick={handleDownload}
       disabled={generating}
-      title="Download this group's standings, results and fixtures as a PDF"
+      title="Download this division's standings, results and fixtures as a PDF"
       className="print:hidden inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-xs font-semibold text-white ring-1 ring-white/30 backdrop-blur transition-colors hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60"
     >
       <svg

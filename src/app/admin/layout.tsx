@@ -13,17 +13,23 @@ export default async function AdminLayout({
   } = await supabase.auth.getUser()
 
   let role: UserRole | null = null
+  let isApproved = false
   if (user) {
     const { data: profile } = await supabase
       .from('user_profiles')
-      .select('role')
+      .select('role, is_approved')
       .eq('id', user.id)
       .single()
     role = (profile?.role as UserRole) ?? null
+    isApproved = profile?.is_approved === true
   }
 
   return (
-    <AdminAuthProvider initialUserId={user?.id ?? null} initialRole={role}>
+    <AdminAuthProvider
+      initialUserId={user?.id ?? null}
+      initialRole={role}
+      initialIsApproved={isApproved}
+    >
       {children}
     </AdminAuthProvider>
   )

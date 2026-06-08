@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { createClient } from '@/lib/supabase'
 import { parseCsv } from '@/lib/csv'
-import { ensureRoundRobinMatches } from '@/lib/matches'
 import type { AgeGroup, Team, Tournament } from '@/lib/types'
 
 interface AdminImportProps {
@@ -145,7 +144,7 @@ export default function AdminImport({
       if (color && !/^#[0-9a-fA-F]{6}$/.test(color)) {
         errors.push('Colour must be a #RRGGBB hex value')
       }
-      if (!targetAgeGroup) errors.push('Select an age group above')
+      if (!targetAgeGroup) errors.push('Select a division above')
       return {
         name: name.trim(),
         short_name: row['short_name']?.trim() || undefined,
@@ -221,7 +220,7 @@ export default function AdminImport({
         return
       }
       toast.success(
-        `Imported ${data.length} age group${data.length === 1 ? '' : 's'}`
+        `Imported ${data.length} division${data.length === 1 ? '' : 's'}`
       )
       setCsvText('')
       onImported()
@@ -254,25 +253,8 @@ export default function AdminImport({
         return
       }
 
-      // Auto-generate round-robin fixtures for every affected age group.
-      const affectedAgeGroupIds = Array.from(
-        new Set(validTeamRows.map((r) => r.age_group_id))
-      )
-      let createdMatches = 0
-      for (const agId of affectedAgeGroupIds) {
-        const r = await ensureRoundRobinMatches(supabase, agId)
-        if (r.error) {
-          toast.error(`Fixture generation failed: ${r.error}`)
-        } else {
-          createdMatches += r.created
-        }
-      }
-
       toast.success(
-        `Imported ${data.length} team${data.length === 1 ? '' : 's'}` +
-          (createdMatches > 0
-            ? ` · ${createdMatches} fixture${createdMatches === 1 ? '' : 's'} created`
-            : '')
+        `Imported ${data.length} team${data.length === 1 ? '' : 's'}`
       )
       setCsvText('')
       onImported()
@@ -342,7 +324,7 @@ export default function AdminImport({
           const active = mode === m
           const label =
             m === 'age_groups'
-              ? 'Age groups'
+              ? 'Divisions'
               : m === 'teams'
                 ? 'Teams'
                 : 'Players'
@@ -370,13 +352,13 @@ export default function AdminImport({
 
       {mode === 'teams' && (
         <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-          Target age group
+          Target division
           <select
             value={targetAgeGroup}
             onChange={(e) => setTargetAgeGroup(e.target.value)}
             className="mt-1 w-full max-w-sm rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-mk-red focus:outline-none focus:ring-1 focus:ring-mk-red dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
           >
-            {ageGroups.length === 0 && <option value="">No age groups</option>}
+            {ageGroups.length === 0 && <option value="">No divisions</option>}
             {ageGroups.map((g) => (
               <option key={g.id} value={g.id}>
                 {g.day === 'saturday' ? 'Sat' : 'Sun'} · {g.name}
@@ -423,7 +405,7 @@ export default function AdminImport({
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs">
             <span className="font-semibold text-zinc-700 dark:text-zinc-300">
               {mode === 'age_groups'
-                ? 'Age groups'
+                ? 'Divisions'
                 : mode === 'teams'
                   ? 'Teams'
                   : 'Players'}{' '}
@@ -565,7 +547,7 @@ export default function AdminImport({
           {importing
             ? 'Importing…'
             : mode === 'age_groups'
-              ? `Import ${validAgeGroupRows.length} age group${validAgeGroupRows.length === 1 ? '' : 's'}`
+              ? `Import ${validAgeGroupRows.length} division${validAgeGroupRows.length === 1 ? '' : 's'}`
               : mode === 'teams'
                 ? `Import ${validTeamRows.length} team${validTeamRows.length === 1 ? '' : 's'}`
                 : `Import ${validPlayerRows.length} player${validPlayerRows.length === 1 ? '' : 's'}`}

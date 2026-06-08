@@ -6,13 +6,23 @@ interface TeamFilterProps {
   pathname: string
   teams: Team[]
   currentTeamId: string | null
+  currentPhaseSlug?: string | null
 }
 
 export default function TeamFilter({
   pathname,
   teams,
   currentTeamId,
+  currentPhaseSlug = null,
 }: TeamFilterProps) {
+  function hrefFor(teamId: string | null) {
+    const params = new URLSearchParams()
+    if (currentPhaseSlug) params.set('phase', currentPhaseSlug)
+    if (teamId) params.set('team', teamId)
+    const query = params.toString()
+    return query ? `${pathname}?${query}` : pathname
+  }
+
   return (
     <nav
       aria-label="Filter by team"
@@ -21,7 +31,7 @@ export default function TeamFilter({
       <ul className="flex w-max items-center gap-2 py-1">
         <li className="shrink-0">
           <Link
-            href={pathname}
+            href={hrefFor(null)}
             scroll={false}
             aria-current={currentTeamId === null ? 'true' : undefined}
             className={
@@ -35,7 +45,7 @@ export default function TeamFilter({
         </li>
         {teams.map((team) => {
           const active = team.id === currentTeamId
-          const href = `${pathname}?team=${encodeURIComponent(team.id)}`
+          const href = hrefFor(team.id)
           return (
             <li key={team.id} className="shrink-0">
               <Link
