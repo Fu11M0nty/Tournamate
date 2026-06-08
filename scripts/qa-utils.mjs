@@ -25,7 +25,13 @@ export function loadLocalEnv() {
 }
 
 export function qaSlug() {
-  return process.env.QA_TOURNAMENT_SLUG || DEFAULT_QA_SLUG
+  return normalizeQaSlug(process.env.QA_TOURNAMENT_SLUG)
+}
+
+export function normalizeQaSlug(value) {
+  if (!value) return DEFAULT_QA_SLUG
+  const match = value.match(/^qa-[a-z0-9-]+/)
+  return match?.[0] || value
 }
 
 export function assertQaSlug(slug) {
@@ -58,18 +64,20 @@ export function createQaClient() {
 }
 
 export async function must(result, label) {
-  if (result.error) {
-    throw new Error(`${label}: ${result.error.message}`)
+  const resolved = await result
+  if (resolved.error) {
+    throw new Error(`${label}: ${resolved.error.message}`)
   }
-  return result.data
+  return resolved.data
 }
 
 export async function maybe(result, label) {
-  if (result.error) {
-    console.warn(`${label}: ${result.error.message}`)
+  const resolved = await result
+  if (resolved.error) {
+    console.warn(`${label}: ${resolved.error.message}`)
     return null
   }
-  return result.data
+  return resolved.data
 }
 
 export async function ensureQaAdmin(supabase) {

@@ -1,371 +1,322 @@
-# AGENTS.md — Netball Tournament Results Website
+# AGENTS.md — Tournamate
 
-This file provides workflow guidance, architecture decisions, and coding standards for this project. Read it fully before starting any task.
+Workflow guidance, architecture, and coding standards for **Tournamate**. Read it fully before starting any task.
 
----
-
-## Project Overview
-
-A two-panel web application for a two-day local netball tournament:
-
-- **Public view** — filterable by day and age group. Displays standings, match results, and upcoming fixtures for the selected age group.
-- **Admin console** (`/admin`) — password-protected interface for the tournament organiser to select a day/age group and enter or edit match scores as games finish.
+> This is the single source of truth. `CLAUDE.md` just imports this file (`@AGENTS.md`). Edit **this** file, not `CLAUDE.md`.
 
 ---
 
-## Tournament Structure
+## What Tournamate is
 
-This is a **weekend tournament**, not an ongoing league. The entire tournament runs across two days with completely independent age groups on each day.
+Tournamate is a **multi-sport, multi-tournament management platform** for grassroots and club competitions. It started life as a single two-day netball results site; it is now a general-purpose tool any organiser can use to plan a tournament structure, generate fixtures, enter scores live, and publish a public results page — for any sport.
 
-| Day | Age Groups | Teams per group |
-|---|---|---|
-| Saturday | 6 age groups | 6–10 teams each |
-| Sunday | 4 age groups | 7–10 teams each |
+It is made of two applications in one repo:
 
-**Key rules:**
-- Age groups are entirely independent — a team exists within one age group on one day only
-- There is no crossover of teams, results, or standings between age groups
-- Each age group runs its own full round-robin (every team plays every other team in their group once)
-- Age groups are named by the organiser at setup time (e.g. "Under 9", "Under 10", "Under 11s", "Year 3", etc.)
+| App | Where | Stack | Audience |
+|---|---|---|---|
+| **Web app** | `src/` (Next.js) | Next.js 16 (App Router), React 19, Tailwind 4, Supabase | Organisers (admin) + public spectators |
+| **Mobile app** | `mobile/` | Expo + expo-router (React Native) | Spectators (read-only) |
 
----
+The web app has three faces:
 
-## Design Reference
+1. **Marketing site** — `/` (hero, feature tour, "register interest"), `/explore` (browse live/upcoming tournaments).
+2. **Public tournament view** — per-tournament hub with standings, results, fixtures, brackets, schedule, teams. No login.
+3. **Admin console** — `/admin`, password-protected (Supabase Auth + RBAC). Where organisers build and run their tournaments.
 
-The UI should closely follow the layout and conventions of **netballresults.uk** (see `https://netballresults.uk/avon/378/`), which is the standard for UK local netball competitions. Key patterns to replicate:
-
-- Two-level filter at the top: Day selector (Saturday / Sunday) → Age Group tabs
-- Standings table below the filter with columns: `# | Team | Pld | W | D | L | GF | GA | GD | Pts`
-- Recent results block below the table — each result shown as: `Team A  47 v 48  Team B`
-- Upcoming fixtures block below results — same layout with scores replaced by `-`
-- Clean, minimal design — prioritise readability on mobile (parents and players check scores on their phones)
-
-For a more polished visual style, reference:
-- **Netball Super League** (`netballsl.com/standings/`) for standings table styling with team colour accents
-- **Flashscore** (`flashscore.info/netball/`) for the match card layout in the results feed
+**Do not assume "netball" or "two days" anywhere.** Sport, number of competition dates, divisions, formats, and scoring rules are all data the organiser configures.
 
 ---
 
-## Tech Stack
+## ⚠️ Critical naming gotcha: Divisions vs `age_groups`
 
-| Layer | Choice | Reason |
-|---|---|---|
-| Frontend | React + Tailwind CSS | Fast to build, mobile-responsive |
-| Backend/DB | Supabase | Postgres with Row Level Security, free tier |
-| Auth | Supabase Auth | Protects admin console, simple email/password |
-| Hosting | Vercel | Free, deploys from GitHub, zero config |
+The product concept is a **Division** (a competition stream within a tournament — e.g. "Under 11", "Mixed Open", "Men's Plate"). The **database table is still named `age_groups`** and foreign keys are still `age_group_id`, for historical reasons.
 
-**Do not deviate from this stack without asking first.**
+- In the UI, copy, and product language: say **Division**.
+- In the database / SQL / column names: it is `age_groups` / `age_group_id`.
+- In TypeScript: the interface is `Division`, with `export type AgeGroup = Division` kept as a compatibility alias (`src/lib/types.ts`).
 
----
-
-## Data Model
-
-### `age_groups` table
-```sql
-id              uuid primary key default gen_random_uuid()
-name            text not null        -- e.g. "Under 9", "Under 11", "Year 3"
-slug            text not null        -- e.g. "under-9", "under-11", "year-3"
-day             text not null        -- values: 'saturday' | 'sunday'
-display_order   int not null         -- controls tab ordering within a day
-created_at      timestamptz default now()
-
--- Constraints
-unique (slug, day)
-unique (name, day)
-check (day in ('saturday', 'sunday'))
-```
-
-### `teams` table
-```sql
-id              uuid primary key default gen_random_uuid()
-name            text not null
-short_name      text             -- e.g. "STORM" for badge/mobile display
-color           text             -- hex colour for team accent e.g. "#e63946"
-age_group_id    uuid not null references age_groups(id) on delete cascade
-created_at      timestamptz default now()
-```
-
-Teams are scoped to a single age group. The same club may have teams in multiple age groups — these are separate rows in the `teams` table.
-
-### `matches` table
-```sql
-id              uuid primary key default gen_random_uuid()
-age_group_id    uuid not null references age_groups(id) on delete cascade
-home_team_id    uuid not null references teams(id)
-away_team_id    uuid not null references teams(id)
-home_score      int              -- null until result entered
-away_score      int              -- null until result entered
-court           text             -- e.g. "Court 1"
-kickoff_time    timestamptz not null
-status          text not null default 'scheduled'
-                -- values: 'scheduled' | 'completed'
-created_at      timestamptz default now()
-
--- Constraints
-check (home_team_id != away_team_id)
-check (home_score is null or home_score >= 0)
-check (away_score is null or away_score >= 0)
-check (status in ('scheduled', 'completed'))
-```
-
-Standings **must be calculated dynamically** from match results — never stored as a separate table. Points:
-- Win = 5
-- Draw = 3
-- Losing bonus = 1 (awarded only if the losing team's score is strictly more than 50% of the winning team's score — e.g. 10–6 earns the bonus, 10–5 does not)
-- Otherwise loss = 0
+When you write a query, filter by `age_group_id`. When you write UI or talk to the user, say "division". Do not rename the table without a planned migration.
 
 ---
 
-## URL Structure & Routing
+## Tech stack
 
-Use clean URL routes so parents can bookmark or share a direct link to their child's age group.
+| Layer | Choice |
+|---|---|
+| Web framework | Next.js 16 (App Router, Server Components + Client Components) |
+| UI | React 19 + Tailwind CSS 4 |
+| Backend / DB | Supabase (Postgres + Row Level Security) |
+| Auth | Supabase Auth (email/password + OAuth) with a `user_profiles` RBAC layer |
+| SSR auth | `@supabase/ssr` (browser, server, and middleware clients in `src/lib/supabase.ts`) |
+| Drag & drop | `@dnd-kit/*` (structure / pool / bracket editors) |
+| Spreadsheets | `xlsx` (team & schedule import/export) |
+| PDF / print | `jspdf` + `html2canvas-pro` (printable scorecards & schedules) |
+| QR | `qrcode.react` (generate), `jsqr` (scan) — score-capture workflow |
+| Toasts | `react-hot-toast` |
+| Mobile | Expo (see `mobile/AGENTS.md`) |
+| Hosting | Vercel (web), deploys from `main` |
+| Testing | Vitest (unit), Playwright (e2e) |
+
+**Do not add new infrastructure (a different DB, ORM, state library, component kit) without asking first.**
+
+---
+
+## Domain model (the structure engine)
+
+Tournamate's power is a flexible competition structure. The hierarchy:
 
 ```
-/                              → redirect to /saturday
-/saturday                      → Saturday view, first age group auto-selected
-/saturday/[age-group-slug]     → e.g. /saturday/under-10
-/sunday                        → Sunday view, first age group auto-selected
-/sunday/[age-group-slug]       → e.g. /sunday/under-12
-/admin                         → Admin dashboard (requires auth)
-/admin/login                   → Admin login page
+Tournament
+├── competition_dates        (event days/sessions — replaces the old hard-coded Sat/Sun)
+├── tournament_venues        (host locations)
+├── courts                   (per-day courts with start/end times)
+├── schedule_events          (lunch / ceremony / non-match blocks)
+└── Division  (table: age_groups)
+    ├── teams                (scoped to one division; pool membership via pool_teams)
+    └── Phase                (an ordered stage: round_robin | group_stage | knockout | league | friendly)
+        ├── pools            (groups within a phase; every phase gets a default pool)
+        └── phase_elements   (group | bracket | single_match | heat | league_table | ladder | swiss_round)
+            └── element_slots (team | source | bye | placeholder | manual — the entrants of an element)
+
+matches                      (belong to a division + phase + pool + phase_element; teams OR slots OR a bye)
+progression_rules            (how results in one phase/element feed slots in the next)
+scoring_systems              (configurable points + tie-breakers, attached at phase/division level)
+
+Officiating:  clubs, umpires, umpire_assignments, umpire_payouts
+People:       players (per team), user_profiles (admin RBAC)
 ```
 
-The `age-group-slug` is derived from the `age_groups.slug` column — lowercase, spaces replaced with hyphens (e.g. "Under 10" → `under-10`). The slug is stored on the `age_groups` table and generated at insert time via the `slugify.ts` utility.
+`supabase/schema.sql` is the authoritative schema. `src/lib/types.ts` mirrors it in TypeScript. Read both before changing data shape.
 
-If a URL is accessed with an invalid day or slug, show a friendly "Group not found" message — not a 404 error page.
+### Phases
 
----
+A **Phase** is one stage of a division's competition, ordered by `display_order`. A division can chain phases (e.g. Group Stage → Knockout). Types: `round_robin`, `group_stage`, `knockout`, `league`, `friendly`. Each phase has its own `match_format`, period/break timings, `standings_mode` (`visible | hidden | none`), and may have its own scoring system.
 
-## Supabase Setup Checklist
+Divisions now start with **zero phases** — the organiser applies a structure template from the admin Structure page (the default-phase trigger is disabled in `schema.sql`).
 
-Complete these steps before writing any application code:
+### Knockout brackets — each round is a separate phase
 
-1. Create Supabase project at `supabase.com`
-2. Create `age_groups`, `teams`, and `matches` tables using the SQL above
-3. Enable Row Level Security (RLS) on all three tables
-4. Apply RLS policies:
-   - `age_groups`: public SELECT, authenticated INSERT/UPDATE/DELETE
-   - `teams`: public SELECT, authenticated INSERT/UPDATE/DELETE
-   - `matches`: public SELECT, authenticated INSERT/UPDATE/DELETE
-5. Copy `SUPABASE_URL` and `SUPABASE_ANON_KEY` into `.env.local`
-6. Run the seed script (see below) to populate test data
+A knockout bracket is modelled as a **sequence of `knockout`-type phases**, one phase per round (Quarter-finals → Semi-finals → Final), ordered by `phases.display_order`. **Do not** model rounds as `round_number` within a single phase — `round_number` is only for ordering rounds *within* a round-robin.
+
+`src/components/PublicBracketView.tsx` is the canonical renderer: it takes all of a division's phases, filters to `phase_type === 'knockout'`, and treats each phase as one round/column. The mobile equivalent is `mobile/components/BracketView.tsx`. Slot labels for not-yet-decided matches ("Winner of…", "Nth place qualifier", "Bye") come from element slots / progression rules.
+
+### Element slots & progression rules
+
+Brackets and downstream phases are populated by **element_slots** (the entrant positions) which can be a fixed `team`, a `source` (e.g. "winner of match X", "1st in pool A"), a `bye`, or a `placeholder`. **progression_rules** describe how a result (`standings_rank`, `match_winner`, `match_loser`, `best_rank`, `manual`) flows from a source phase/element/pool/match into a target slot. This is what lets group winners advance into a knockout automatically. See `src/lib/phaseProgression.ts` and `src/lib/qualificationMappings.ts`.
 
 ---
 
-## Seed Data
+## Scoring systems (configurable — not hard-coded)
 
-Always generate a seed script early so the UI can be developed with realistic data.
+Points are **not** hard-coded. A `scoring_systems` row defines win/draw/loss points, optional OT/SO win points, bonus-point logic, forfeit handling, and a configurable tie-breaker hierarchy (`tie_breaker_config: string[]`). Scoring systems attach at phase level (preferred) or division level.
 
-**Saturday — 3 sample age groups** (representative subset of the real 6):
+The **netball default** (used as the fallback when no system is set) is:
+- Win = 5, Draw = 3, Loss = 0
+- Losing bonus = 1, awarded when the loser's score is strictly more than 50% of the winner's (`bonus_loss_threshold_type: 'percentage'`, value 50)
+- Tie-breakers: head-to-head → goal difference → goals for
 
-| Age Group | Teams | Completed results |
-|---|---|---|
-| Under 9 | 6 | 4 |
-| Under 11 | 8 | 6 |
-| Under 13 | 10 | 8 |
+Forfeits: a side that no-shows, or is **≥ 4 minutes late**, forfeits the match (`forfeitSide` in `src/lib/standings.ts`).
 
-**Sunday — 2 sample age groups** (representative subset of the real 4):
-
-| Age Group | Teams | Completed results |
-|---|---|---|
-| Under 10 | 7 | 3 |
-| Under 12 | 9 | 5 |
-
-Completed results must be varied enough to produce a non-trivial standings table (i.e. not all wins for one team). Use realistic netball scores (typically 10–40 goals per team per match). All remaining fixtures should have `status = 'scheduled'` and a realistic `kickoff_time` on the correct day.
+Treat the default only as a fallback. New scoring logic must read from the `ScoringSystem` passed in, never assume 5/3/1.
 
 ---
 
-## Project Structure
+## Standings calculation
 
-```
-/
-├── src/
-│   ├── app/
-│   │   ├── page.tsx                               # Redirects to /saturday
-│   │   ├── [day]/
-│   │   │   ├── page.tsx                           # Day view — redirects to first age group slug
-│   │   │   └── [ageGroupSlug]/
-│   │   │       └── page.tsx                       # Main public view: standings + results + fixtures
-│   │   ├── admin/
-│   │   │   ├── page.tsx                           # Admin dashboard with day/age group filter
-│   │   │   └── login/
-│   │   │       └── page.tsx                       # Admin login
-│   │   └── layout.tsx
-│   ├── components/
-│   │   ├── DayTabs.tsx                            # Saturday / Sunday top-level switcher
-│   │   ├── AgeGroupTabs.tsx                       # Age group tab bar for the selected day
-│   │   ├── StandingsTable.tsx                     # Standings table for one age group
-│   │   ├── ResultCard.tsx                         # Single completed match display
-│   │   ├── FixtureCard.tsx                        # Single upcoming fixture display
-│   │   ├── ScoreEntryForm.tsx                     # Admin score entry modal/form
-│   │   └── AdminMatchList.tsx                     # Admin list of all matches for selected group
-│   ├── lib/
-│   │   ├── supabase.ts                            # Supabase client initialisation
-│   │   ├── standings.ts                           # Pure function: matches[] + teams[] → standings[]
-│   │   ├── slugify.ts                             # name → slug utility
-│   │   └── types.ts                               # Shared TypeScript types (see below)
-├── AGENTS.md                                      # This file
-├── .env.local                                     # Supabase credentials (never commit)
-└── .env.example                                   # Committed template with blank values
-```
-
----
-
-## Key Implementation Rules
-
-### Day and age group filtering
-- Every Supabase query must be scoped by `age_group_id` — never fetch all matches and filter client-side
-- When the day tab changes, reset the age group to the first group for that day (ordered by `display_order`)
-- The selected day and age group are reflected in the URL — use Next.js dynamic routes, not query params
-
-### Standings calculation
-The `standings.ts` function must be a **pure function** with signature:
-```ts
-calculateStandings(teams: Team[], matches: Match[]): StandingRow[]
-```
-- Receives only the teams and matches for a single, already-filtered age group
-- Filters to only `status === 'completed'` matches when computing statistics
-- Sort order: Pts DESC → GD DESC → GF DESC → Team name ASC
-
-### Admin console
-- Require a Supabase Auth session to access any `/admin` route — redirect to `/admin/login` if unauthenticated
-- Admin dashboard has the same Day → Age Group two-level filter as the public view
-- All matches for the selected age group are listed in kick-off time order
-- Score entry form fields: Home Score (number) + Away Score (number) + Status dropdown (`scheduled` / `completed`)
-- After saving, optimistically update the UI and show a success toast
-- Validate: no negative scores, scores must be whole numbers
-
-### Mobile-first
-- Design the public page for 375px width first
-- Both the Day tabs and Age Group tabs must scroll horizontally on mobile — use `overflow-x-auto whitespace-nowrap` and ensure no line wrapping occurs (there can be up to 6 age group tabs)
-- Standings table must be horizontally scrollable on mobile — wrap in `overflow-x-auto`
-- Match cards should be full-width stacked cards on mobile, not a table
-- Admin console can be desktop-first (organisers use a laptop or tablet on the day)
-
----
-
-## TypeScript Types
+`src/lib/standings.ts` exports a **pure** function:
 
 ```ts
-// lib/types.ts
+calculateStandings(teams: Team[], matches: Match[], scoringSystem?: ScoringSystem): StandingRow[]
+```
 
-export type Day = 'saturday' | 'sunday'
+- Receives teams + matches already scoped to a single phase/pool.
+- Counts only `status === 'completed'` matches; respects forfeits and the scoring system.
+- Falls back to the netball default if `scoringSystem` is omitted.
+- Sort order follows the scoring system's tie-breaker config (default: Pts → GD → GF → name).
+- Mirror logic lives in `mobile/lib/standings.ts` for the mobile app — keep the two in sync when changing scoring behaviour.
 
-export interface AgeGroup {
-  id: string
-  name: string           // e.g. "Under 11"
-  slug: string           // e.g. "under-11"
-  day: Day
-  display_order: number
-}
+Standings are **always derived** — there is no stored standings table.
 
-export interface Team {
-  id: string
-  name: string
-  short_name: string | null
-  color: string | null
-  age_group_id: string
-}
+---
 
-export type MatchStatus = 'scheduled' | 'completed'
+## Routing
 
-export interface Match {
-  id: string
-  age_group_id: string
-  home_team_id: string
-  away_team_id: string
-  home_score: number | null
-  away_score: number | null
-  court: string | null
-  kickoff_time: string    // ISO string
-  status: MatchStatus
-}
+### Public (web)
+```
+/                                         Marketing landing
+/explore                                  Browse live/upcoming tournaments
+/register-interest                        Organiser interest form
+/[tournamentSlug]                         Tournament hub — tabs: info | teams | standings | schedule
+/[tournamentSlug]/[day]                   Day view — redirects to first division
+/[tournamentSlug]/[day]/[divisionSlug]    Public division view: standings + results + fixtures + bracket
+```
+Invalid slugs render a friendly `NotFoundMessage` ("Tournament not found" / "Group not found"), never a 404 page.
 
-export interface StandingRow {
-  position: number
-  team: Team
-  played: number
-  won: number
-  drawn: number
-  lost: number
-  goals_for: number
-  goals_against: number
-  goal_difference: number
-  points: number
-}
+### Admin (web, auth-gated by `middleware.ts`)
+```
+/admin                       Console (panel-driven SPA — see panels below)
+/admin/login                 Supabase sign-in
+/admin/confirm-pending       Email not yet confirmed
+/admin/access-denied         Authenticated but not an approved admin
+/admin/signup                Disabled — redirects to login
+/admin/capture/[matchId]     Score-capture page (used by QR links)
+/admin/c/[code]              Short-code capture entry
+/admin/scorecards/[day]      Printable scorecards
 ```
 
 ---
 
-## Component Behaviour Specifications
+## Admin console
 
-### DayTabs
-- Two tabs: "Saturday" and "Sunday"
-- Active tab is visually distinct (filled/underlined vs inactive)
-- Clicking navigates to `/{day}` which then redirects to the first age group for that day
-- Both tabs always visible regardless of which day the user is on
+`src/app/admin/page.tsx` is a panel-driven client app. Panels (`AdminPanel` in `AdminSidebar.tsx`):
+`general` · `match-entry` · `schedule` · `age-groups` (Divisions) · `scoring` · `import` · `snapshots` · `users` · `officiating` · `help`.
 
-### AgeGroupTabs
-- One tab per age group for the selected day, ordered by `display_order`
-- Scrollable horizontally on mobile — never wraps to a second row
-- Active tab highlighted; clicking navigates to `/{day}/{slug}`
-- If only one age group exists for a day, still render the tab bar (do not hide it)
-- Saturday will show up to 6 tabs; Sunday up to 4 tabs
+Capabilities span: tournament setup & cloning, division/phase/pool/bracket structure building (`StructureWizard`, `AdvancedStructureEditor`, drag-and-drop), team & player management, fixture generation (`autoPlan.ts`) and the fixture matrix, schedule/court planning, score entry, QR-based score capture, officiating (umpire assignment & payouts), spreadsheet import/export, printable scorecards, snapshots, and user administration.
 
-### StandingsTable
-- First column: position number (`#`)
-- Highlight position 1 row with a subtle left accent border
-- Use alternating row shading for readability
-- Bold the `Pts` column
-- Show a 🏆 trophy icon next to position 1 if ALL matches in the group have `status = 'completed'`
-
-### ResultCard
-- Layout: `[Home Team]  [Home Score] – [Away Score]  [Away Team]`
-- Winning team name bold; draw = both normal weight
-- Kick-off time and court shown in smaller muted text below
-- Sort order: by kick-off time descending (most recent first)
-
-### FixtureCard
-- Mirrors ResultCard layout but with `–` in place of scores
-- Sorted by kick-off time ascending (soonest upcoming first)
-
-### ScoreEntryForm (Admin)
-- Header shows: age group name + fixture label (`Home Team vs Away Team — 10:30am | Court 1`)
-- Pre-populated if scores already exist
-- Submit disabled until both score fields have a value
-- Scores must be non-negative integers — enforce with `min="0"` and `step="1"` on inputs
+### RBAC
+Auth = Supabase Auth **plus** a `user_profiles` table with `role` (`superadmin | tournament_admin`) and `is_approved`. `middleware.ts` gates every `/admin` route: unauthenticated → login; unconfirmed email → confirm-pending; authenticated-but-not-approved-admin → access-denied. There is **no public signup** — admins are created via the Supabase dashboard and promoted with SQL (see `supabase/README.md`).
 
 ---
 
-## Environment Variables
+## Mobile app
+
+A read-only **spectator** app (Expo + expo-router) in `mobile/`, separate from the web app. Light theme (navy `#0f172a`, bg `#f8fafc`, orange accent `#f47c20`). Screens: tournament list (+ QR scan), tournament hub (Info/Teams/Standings/Schedule), division detail, match detail, and a swipeable knockout bracket carousel. Typecheck with `npx tsc --noEmit -p mobile/tsconfig.json`. See `mobile/AGENTS.md` — and note the warning there to read the exact versioned Expo docs before writing mobile code.
+
+---
+
+## Project structure (web)
+
+```
+src/
+├── app/
+│   ├── page.tsx                          Marketing landing
+│   ├── explore/                          Explore tournaments
+│   ├── register-interest/ , signup/      Lead capture
+│   ├── [tournamentSlug]/
+│   │   ├── page.tsx                       Tournament hub (info/teams/standings/schedule)
+│   │   └── [day]/[divisionSlug]/page.tsx Public division view
+│   ├── admin/                            Console + login/capture/scorecards
+│   ├── api/register-interest/route.ts    Interest form handler
+│   └── layout.tsx                        SiteHeader / SiteFooter / Toaster
+├── components/                           ~80 components — Admin*, Public*, structure editors, cards
+│   └── wizard/                           Structure setup wizard steps
+├── lib/
+│   ├── supabase.ts                       browser / server / middleware clients
+│   ├── types.ts                          shared types (source of truth for app data shape)
+│   ├── standings.ts                      pure standings + scoring + forfeit logic
+│   ├── scoring.ts                        phase/scoring-system resolution helpers
+│   ├── phaseProgression.ts               advance results between phases
+│   ├── qualificationMappings.ts          map source ranks/outcomes to slots
+│   ├── formatBuilders.ts / autoPlan.ts   structure templates + fixture generation
+│   ├── structureValidation.ts            validate a division's structure
+│   ├── matches.ts / matchLabel.ts / matchRules.ts
+│   ├── csv.ts / scheduleExcel.ts / image.ts
+│   ├── competitionDates.ts / time.ts / slugify.ts
+│   ├── actions.ts / auth-actions.ts      server actions
+│   └── auth-context.tsx                  admin auth context
+middleware.ts                             gates /admin behind Supabase Auth + RBAC
+supabase/                                 schema.sql + additive *.sql migrations + RPCs + seeds
+mobile/                                   Expo spectator app (own AGENTS.md)
+scripts/                                  qa-seed / qa-cleanup / generate-seed / playwright runner
+tests/                                    unit (Vitest) + e2e (Playwright)
+```
+
+---
+
+## Key implementation rules
+
+### Data scoping
+- Scope every query by the right key: `tournament_id`, then `age_group_id` (division), then `phase_id` / `pool_id`. Never fetch everything and filter client-side.
+- The selected tournament / day / division live in the **URL** (dynamic routes), not query params, so links are shareable. Admin panel/tab state may use local state.
+
+### Multi-sport / multi-tournament
+- Nothing may hard-code a sport, a points scheme, "Saturday/Sunday", or a fixed number of divisions. Read it from `tournaments`, `competition_dates`, `scoring_systems`, etc.
+- `competition_dates` is the real model of event days; `legacy_day` (`saturday|sunday`) exists only for backward compatibility — prefer competition dates in new code.
+
+### Structure & progression
+- Build/maintain bracket UIs by treating each `knockout` phase as a round, sorted by `display_order`.
+- When results change, advancing teams flows through `progression_rules` / `phaseProgression.ts` — don't manually wire winners into later matches in ad-hoc code.
+
+### Mobile-first public views
+- Design the public pages for 375px first. Tab bars (day, division, phase) scroll horizontally (`overflow-x-auto whitespace-nowrap`), never wrap. Standings tables wrap in `overflow-x-auto`. Match info renders as stacked cards on mobile.
+- The admin console may be desktop-first (organisers use a laptop/tablet).
+
+### Soft deletes
+- `teams` and `matches` use `deleted_at`. Filter `deleted_at is null` for active data.
+
+---
+
+## Database & migrations
+
+- `supabase/schema.sql` is the **destructive** fresh-build baseline (it drops tables). Never run it against production.
+- Schema changes ship as **additive** `supabase/*.sql` files (migrations, RPCs, RLS policies, seeds). Add a new file; don't edit history.
+- `supabase/README.md` is the runbook (fresh build vs production-safe upgrade). Keep `schema.sql` and `src/lib/types.ts` in agreement when you change shape.
+- All tables have RLS: public `SELECT`, authenticated `INSERT/UPDATE/DELETE`. The anon key is safe in the browser because RLS enforces access.
+
+---
+
+## Commands
+
+```bash
+npm run dev              # Next dev server
+npm run build            # production build
+npm run typecheck        # tsc --noEmit
+npm run lint             # ESLint
+npm run test:unit        # Vitest
+npm run test:e2e         # Playwright (against running app / PLAYWRIGHT_BASE_URL)
+npm run test:e2e:local   # Playwright starts the dev server
+npm run qa:db            # cleanup, seed, DB/RLS tests, cleanup
+npm run qa:public        # public browser smoke only
+npm run qa:admin         # admin browser smoke only
+npm run qa:e2e           # full browser smoke
+npm run qa:evidence      # test-by-test screenshot/video evidence index
+npm run qa:release       # typecheck + unit + qa:db + qa:e2e
+npm run qa               # alias for qa:release
+npm run qa:reset         # cleanup then seed
+```
+
+QA seed/cleanup needs `SUPABASE_SERVICE_ROLE_KEY`; remote projects are blocked unless `QA_ALLOW_REMOTE=1` and the tournament slug starts with `qa-`.
+
+Mobile typecheck: `npx tsc --noEmit -p mobile/tsconfig.json`.
+
+---
+
+## Environment variables
 
 ```
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=        # server-only: QA scripts, privileged RPCs. Never expose to the browser.
 ```
 
-Both are prefixed `NEXT_PUBLIC_` so they are available client-side. This is safe — Supabase RLS policies enforce access control; the anon key does not grant write or admin access.
+`NEXT_PUBLIC_*` are safe client-side (RLS enforces access). The service-role key must stay server-side only.
 
 ---
 
 ## Definition of Done
 
 A task is complete when:
-1. The feature works correctly with real Supabase data (not mocked)
-2. The page is visually correct at 375px (mobile) and 1280px (desktop)
-3. Switching between days and age groups always shows the correct isolated data — no cross-contamination between groups
-4. No TypeScript errors (`tsc --noEmit` passes)
+1. It works against real Supabase data (not mocked), respecting RLS.
+2. Public pages are correct at 375px and 1280px.
+3. Switching tournament / day / division / phase always shows correctly isolated data — no cross-contamination.
+4. Scoring/standings respect the configured `scoring_system` (not a hard-coded scheme).
+5. The test impact has been considered and stated: unit, DB, public E2E, admin E2E, QA seed, and docs are updated where relevant.
+6. `npm run typecheck` and `npm run lint` pass; relevant tests pass. Mobile changes also pass the mobile typecheck.
+
+### Test impact rule
+
+For every code or schema change, decide whether tests need adding or amending:
+
+- Pure business logic: update `tests/unit/`.
+- Database shape, RLS, seed, or cleanup: update `tests/db/` and QA seed/cleanup scripts.
+- Public spectator behaviour: update public Playwright checks and run `npm run qa:public` or `npm run qa:e2e`.
+- Admin organiser behaviour: update safe admin Playwright checks and run `npm run qa:admin` or `npm run qa:e2e`.
+- Format, fixture, schedule, bracket, scoring, or progression changes: consider unit, DB, public E2E, admin E2E, and QA seed data together.
+
+If a change does not include test changes, note why in the final implementation summary. If automation is deferred, add it to `docs/qa-test-catalogue.md` as a future roadmap item.
 
 ---
 
-## Out of Scope (Do Not Build)
+## Scope notes
 
-- Player registration or player stats
-- Match notifications or email alerts
-- Cup / Plate knockout brackets (round-robin group stage only)
-- Multiple tournaments or seasons
-- Social sharing features
-- Any payment or ticketing functionality
-
-If asked to build any of the above, confirm with the user before proceeding.
+This project has grown well past the original "two-day netball results site". The following — once listed as out of scope — are now **in scope and built**: knockout brackets, multiple tournaments, multiple sports, configurable scoring, officiating/umpires, and players. Player *stats*, notifications/email alerts, social sharing, and payments/ticketing remain out of scope — confirm with the user before building any of those.

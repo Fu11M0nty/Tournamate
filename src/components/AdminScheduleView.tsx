@@ -3220,6 +3220,12 @@ function DraggableMatch({
         onToggleSelected(match.id, additive)
         e.stopPropagation()
       }}
+      onDoubleClick={(e) => {
+        if (!onAssign) return
+        onAssign()
+        e.preventDefault()
+        e.stopPropagation()
+      }}
       style={{
         ...style,
         opacity: isDragging ? 0.4 : 1,

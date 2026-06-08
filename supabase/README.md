@@ -121,6 +121,7 @@ After running seed data, re-run:
 backfill_netball_scoring.sql
 add_competition_dates.sql
 add_phases.sql
+add_phase_metadata.sql
 move_scoring_to_phases.sql
 add_pools.sql
 add_phase_elements.sql
@@ -139,6 +140,7 @@ backfill_netball_scoring.sql
 add_rbac.sql
 add_competition_dates.sql
 add_phases.sql
+add_phase_metadata.sql
 move_scoring_to_phases.sql
 add_pools.sql
 add_phase_elements.sql

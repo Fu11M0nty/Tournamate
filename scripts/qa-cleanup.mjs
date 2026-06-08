@@ -15,15 +15,14 @@ const tournaments = await must(
 
 if (tournaments.length === 0) {
   console.log(`No QA tournament found for ${slug}. Nothing to clean.`)
-  process.exit(0)
+} else {
+  await must(
+    supabase
+      .from('tournaments')
+      .delete()
+      .eq('slug', slug),
+    'Delete QA tournament'
+  )
+
+  console.log(`Cleaned ${tournaments.length} QA tournament(s): ${tournaments.map((tournament) => tournament.slug).join(', ')}`)
 }
-
-await must(
-  supabase
-    .from('tournaments')
-    .delete()
-    .eq('slug', slug),
-  'Delete QA tournament'
-)
-
-console.log(`Cleaned ${tournaments.length} QA tournament(s): ${tournaments.map((tournament) => tournament.slug).join(', ')}`)

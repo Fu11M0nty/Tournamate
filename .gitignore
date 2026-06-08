@@ -12,6 +12,12 @@
 
 # testing
 /coverage
+/qa-reports
+/test-results
+/playwright-report/data
+
+# graphify knowledge-graph cache (local only)
+/graphify-out
 
 # next.js
 /.next/

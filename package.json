@@ -10,14 +10,22 @@
     "typecheck": "tsc --noEmit --pretty false",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
+    "test:db": "vitest run --config vitest.db.config.ts",
     "test:e2e": "playwright test --pass-with-no-tests",
     "test:e2e:local": "node scripts/run-playwright-local.mjs",
     "test:e2e:ui": "playwright test --ui",
     "qa:seed": "node scripts/qa-seed.mjs",
     "qa:cleanup": "node scripts/qa-cleanup.mjs",
     "qa:reset": "npm run qa:cleanup && npm run qa:seed",
+    "qa:db": "node scripts/run-db-tests.mjs",
+    "qa:e2e": "node scripts/run-e2e-qa.mjs",
+    "qa:public": "node scripts/run-e2e-qa.mjs --grep \"QA public\" --expected-passed 18 --expected-skipped 0",
+    "qa:admin": "node scripts/run-e2e-qa.mjs --grep \"QA admin\" --expected-passed 15 --expected-skipped 11",
+    "qa:report": "node scripts/generate-qa-report.mjs",
+    "qa:evidence": "node scripts/generate-qa-evidence-index.mjs",
     "qa:check": "npm run typecheck && npm run lint && npm run test:unit && npm run test:e2e",
-    "qa": "npm run qa:seed && npm run qa:check && npm run qa:cleanup"
+    "qa:release": "npm run typecheck && npm run test:unit && npm run qa:db && npm run qa:e2e",
+    "qa": "npm run qa:release"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

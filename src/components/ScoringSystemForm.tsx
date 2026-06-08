@@ -120,12 +120,12 @@ export default function ScoringSystemForm({
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">System Name</label>
-            <input required type="text" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} className="w-full border rounded p-2 text-sm" placeholder="e.g., Junior Netball (5-3-1)" />
+            <label htmlFor="scoring-system-name" className="block text-sm font-medium text-gray-700 mb-1">System Name</label>
+            <input id="scoring-system-name" required type="text" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} className="w-full border rounded p-2 text-sm" placeholder="e.g., Junior Netball (5-3-1)" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Sport Type</label>
-            <select required value={formData.sport_type} onChange={e => setFormData({ ...formData, sport_type: e.target.value })} className="w-full border rounded p-2 text-sm">
+            <label htmlFor="scoring-sport-type" className="block text-sm font-medium text-gray-700 mb-1">Sport Type</label>
+            <select id="scoring-sport-type" required value={formData.sport_type} onChange={e => setFormData({ ...formData, sport_type: e.target.value })} className="w-full border rounded p-2 text-sm">
               {SPORTS.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
@@ -135,16 +135,16 @@ export default function ScoringSystemForm({
           <h3 className="font-semibold text-sm mb-3">Match Points</h3>
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Win Points</label>
-              <input type="number" required value={formData.win_pts} onChange={e => setFormData({ ...formData, win_pts: Number(e.target.value) })} className="w-full border rounded p-2 text-sm" />
+              <label htmlFor="scoring-win-points" className="block text-xs font-medium text-gray-600 mb-1">Win Points</label>
+              <input id="scoring-win-points" type="number" required value={formData.win_pts} onChange={e => setFormData({ ...formData, win_pts: Number(e.target.value) })} className="w-full border rounded p-2 text-sm" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Draw Points</label>
-              <input type="number" required value={formData.draw_pts} onChange={e => setFormData({ ...formData, draw_pts: Number(e.target.value) })} className="w-full border rounded p-2 text-sm" />
+              <label htmlFor="scoring-draw-points" className="block text-xs font-medium text-gray-600 mb-1">Draw Points</label>
+              <input id="scoring-draw-points" type="number" required value={formData.draw_pts} onChange={e => setFormData({ ...formData, draw_pts: Number(e.target.value) })} className="w-full border rounded p-2 text-sm" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Loss Points</label>
-              <input type="number" required value={formData.loss_pts} onChange={e => setFormData({ ...formData, loss_pts: Number(e.target.value) })} className="w-full border rounded p-2 text-sm" />
+              <label htmlFor="scoring-loss-points" className="block text-xs font-medium text-gray-600 mb-1">Loss Points</label>
+              <input id="scoring-loss-points" type="number" required value={formData.loss_pts} onChange={e => setFormData({ ...formData, loss_pts: Number(e.target.value) })} className="w-full border rounded p-2 text-sm" />
             </div>
           </div>
         </div>

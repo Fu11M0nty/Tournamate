@@ -136,6 +136,7 @@ create table phases (
   break_q1_q2_minutes int not null default 0,
   break_half_time_minutes int not null default 0,
   break_q3_q4_minutes int not null default 0,
+  metadata      jsonb not null default '{}'::jsonb,
   created_at    timestamptz not null default now(),
   unique (age_group_id, slug),
   check (slug ~ '^[a-z0-9-]+$'),
@@ -441,8 +442,8 @@ create table matches (
   competition_date_id uuid references competition_dates(id) on delete set null,
   home_team_id  uuid references teams(id),
   away_team_id  uuid references teams(id),
-  home_slot_id  uuid references element_slots(id) on delete set null,
-  away_slot_id  uuid references element_slots(id) on delete set null,
+  home_slot_id  uuid,
+  away_slot_id  uuid,
   home_score    int,
   away_score    int,
   court         text,
@@ -604,6 +605,12 @@ create index element_slots_phase_element_id_idx on element_slots(phase_element_i
 create index element_slots_team_id_idx
   on element_slots(team_id)
   where team_id is not null;
+
+alter table matches
+  add constraint matches_home_slot_id_fkey
+    foreign key (home_slot_id) references element_slots(id) on delete set null,
+  add constraint matches_away_slot_id_fkey
+    foreign key (away_slot_id) references element_slots(id) on delete set null;
 
 create table progression_rules (
   id            uuid primary key default gen_random_uuid(),
