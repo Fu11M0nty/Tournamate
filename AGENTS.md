@@ -292,9 +292,12 @@ node scripts/roadmap.mjs set "<title>" --status "In progress"
 node scripts/roadmap.mjs fields          # valid field/option values
 ```
 
-- When asked to capture an idea, **add** it (defaults: Status `Unplanned`, Timeframe `Backlog`); set `--source` to the assistant in use.
-- When asked to work from the roadmap, **pull**, set the item `In progress`, satisfy its **Acceptance criteria**, then set `Completed`.
+**Adding an idea (propose → confirm → post).** Run `fields` for valid options. Extract a Title, description (`--body`), and testable Acceptance criteria from the prompt, and infer the structured fields (Area, Priority, Effort, Value, Estimate+unit, Timeframe). **Show the proposed item and let the user confirm/adjust the subjective fields before posting** — don't post blind. Then `add` with `--source` set to the assistant in use (defaults: Status `Unplanned`, Timeframe `Backlog`).
+
+**Working from the roadmap (clarify → plan → stop).** If no item is named, `pull` (or `list`) and ask which to take; if one is named, `show` it (disambiguate if a title substring matches several). Read its Acceptance criteria, then **ask clarifying questions until you understand what "done" means** (scope, edge cases, affected code, data/scoring/RLS, 375px/1280px, test impact). Then set it `In progress` (and write back any sharpened `--acceptance`), produce an implementation plan, and **stop for the user's go-ahead before writing code**. On completion set `Completed`; if blocked set `Blocked` with a `--deps` note.
+
 - On Windows, prefer PowerShell — Git-Bash mangles args that start with `/` (see the gotcha in `docs/roadmap.md`).
+- Claude Code users get this as the `/roadmap` skill; the CLI is identical, so behaviour matches across assistants.
 
 ---
 
