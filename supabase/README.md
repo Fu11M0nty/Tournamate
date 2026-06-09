@@ -63,6 +63,7 @@ Run:
 add_rbac.sql
 add_tournamate_fields.sql
 add_tournament_general.sql
+add_organiser_onboarding.sql
 ```
 
 This creates:
@@ -71,7 +72,7 @@ This creates:
 - auth profile trigger
 - tournament ownership via `tournaments.created_by`
 - role-aware RLS policies
-- user management RPCs
+- user management RPCs (incl. `set_user_approval()` and the extended `list_users_with_roles()` used by the organiser invite flow)
 - `clone_tournament()` and `commit_schedule()` RPCs
 - TournaMate platform fields such as `sport`, `venue_*`, `is_public`, `is_approved`, and `organisation_name`
 - tournament general settings such as multiple venues, `sport_other`, and `default_scoring_system_id`
@@ -147,6 +148,7 @@ add_phase_elements.sql
 add_placeholder_matches.sql
 add_tournamate_fields.sql
 add_tournament_general.sql
+add_organiser_onboarding.sql
 backup_matches.sql
 backup_matches_rpc.sql
 backup_age_group_rpc.sql
@@ -190,6 +192,43 @@ where id = (
   where email = 'you@example.com'
 );
 ```
+
+## Onboarding Organisers
+
+Once at least one superadmin exists, organisers are onboarded **from inside the app** — no Supabase dashboard needed:
+
+1. Sign in as a superadmin and open **Admin → Users**.
+2. Under **Invite an organiser**, enter the organiser's email and click **Invite organiser**.
+3. This creates the account (server-side, via the service-role admin API), marks the profile as an approved `tournament_admin`, and returns a **copyable invite link**.
+4. Send the link to the organiser. They open it, set a password on `/auth/set-password`, and land in the admin console. They own any tournaments they create (scoped via `tournaments.created_by`).
+
+If the email already has an account, the same action approves them and returns a password-reset link instead.
+
+Requirements:
+
+- `SUPABASE_SERVICE_ROLE_KEY` must be set server-side (never exposed to the browser).
+- Add your deployment origin to **Supabase Auth → URL Configuration → Redirect URLs** (e.g. `https://your-app.vercel.app/**`, plus `http://localhost:3000/**` for local) so the invite link is allowed to return to `/auth/set-password`. Otherwise Supabase falls back to the Site URL and the link won't complete setup.
+- The invite link relies on the verify/redirect flow, not email delivery, so no SMTP configuration is required for the pilot.
+
+### Manual fallback (Supabase dashboard)
+
+The dashboard workflow still works if you prefer it or the service-role key is unavailable:
+
+```text
+Authentication -> Users -> Add user   (set/share a temporary password)
+```
+
+Then approve the account:
+
+```sql
+update public.user_profiles
+set role = 'tournament_admin', is_approved = true
+where id = (
+  select id from auth.users where email = 'organiser@example.com'
+);
+```
+
+The organiser can then sign in at `/admin/login`. Middleware still blocks anyone who is unauthenticated, unconfirmed, unapproved, or non-admin.
 
 ## Verification Queries
 

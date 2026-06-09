@@ -8,7 +8,7 @@ For run commands, environment setup, and evidence locations, use `docs/qa-runboo
 
 | Layer | Command | Test count | Main purpose |
 | --- | --- | ---: | --- |
-| Unit logic | `npm run test:unit` | 23 | Checks pure calculation and mapping logic without Supabase or a browser. |
+| Unit logic | `npm run test:unit` | 31 | Checks pure calculation and mapping logic without Supabase or a browser. |
 | Database integration | `npm run qa:db` | 11 | Seeds real QA data, checks Supabase/RLS behaviour, then cleans up. |
 | Browser E2E | `npm run qa:e2e` | 44 | Seeds QA data, runs public/admin browser workflows, captures screenshots/videos, then cleans up. |
 | Public browser E2E | `npm run qa:public` | 18 | Runs spectator-facing public page checks only. |
@@ -215,6 +215,7 @@ Use this roadmap when planning future QA enhancements. Items are grouped by prod
 | Pool management | Moving teams between pools and validating save behaviour. Duplicate assignment prevention now has safe E2E coverage. |
 | Fixture generation | Mutating generate/regenerate flows, placeholder fixture creation, and cleanup behaviour. Fixture-generation controls now have safe E2E visibility coverage. |
 | Knockout/progression | Resolved brackets, play-ins, placement routes, double-elimination routes, and public bracket rendering. |
+| Organiser onboarding (#19) | Unit coverage for the onboarding helpers (`normalizeEmail`, `isValidEmail`, `mapOnboardingStatus`) now exists. Still to automate: **DB** — `set_user_approval()` and the extended `list_users_with_roles()` are superadmin-gated, approve/revoke works, self-revoke is blocked. **Admin E2E** — superadmin sees the Invite/Approve controls, a `tournament_admin` does not, anonymous `/admin` stays blocked, and an invited→set-password→`/admin` round trip. These need a seeded `tournament_admin` alongside the superadmin and a test Supabase project with the service-role key. |
 | Schedule guardrails | Court clashes, back-to-back warnings, dependency order between phases, and unplanning. |
 | Scoring systems | Confirming standings use a newly selected custom scoring system. Create/edit now has safe E2E coverage. |
 | Imports/exports | Team import, schedule export/import round trip, and validation errors. |
