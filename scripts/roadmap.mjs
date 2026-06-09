@@ -16,7 +16,8 @@
 //                                  [--source ..] [--limit N] [--json]
 //   node scripts/roadmap.mjs pull [--area ..] [--limit N] [--json]   # actionable items, ranked
 //   node scripts/roadmap.mjs show <itemId|title-substring>
-//   node scripts/roadmap.mjs set  <itemId|title-substring> [--status ..] [--timeframe ..] ...
+//   node scripts/roadmap.mjs set  <itemId|title-substring> [--status ..] [--timeframe ..] [--note ".."]
+//   node scripts/roadmap.mjs log  <itemId|title-substring> --body "what was done"   # progress comment
 //   node scripts/roadmap.mjs fields                                  # list fields + options
 //
 // Env overrides: ROADMAP_OWNER (default Fu11M0nty), ROADMAP_PROJECT (default 1).
@@ -168,9 +169,10 @@ function fetchItems() {
             nodes {
               id
               content {
-                ... on DraftIssue { title body }
-                ... on Issue { title url number }
-                ... on PullRequest { title url number }
+                __typename
+                ... on DraftIssue { id title body }
+                ... on Issue { id title url number body }
+                ... on PullRequest { id title url number body }
               }
               fieldValues(first: 30) {
                 nodes {
@@ -195,6 +197,9 @@ function fetchItems() {
       }
       items.push({
         id: node.id,
+        contentId: node.content?.id || null,
+        typename: node.content?.__typename || null,
+        number: node.content?.number ?? null,
         title: node.content?.title || '(untitled)',
         body: node.content?.body || '',
         url: node.content?.url || null,
@@ -220,11 +225,17 @@ function matchFilter(item, flags) {
 }
 
 function resolveItem(items, ref) {
-  if (!ref) throw new Error('Provide an item id or a title substring.')
+  if (!ref) throw new Error('Provide an item id, issue number, or a title substring.')
   if (ref.startsWith('PVTI_')) {
     const byId = items.find((i) => i.id === ref)
     if (!byId) throw new Error(`No item with id ${ref}`)
     return byId
+  }
+  if (/^#?\d+$/.test(ref)) {
+    const n = Number(ref.replace('#', ''))
+    const byNum = items.find((i) => i.number === n)
+    if (!byNum) throw new Error(`No roadmap item is backed by issue #${n}`)
+    return byNum
   }
   const matches = items.filter((i) => i.title.toLowerCase().includes(ref.toLowerCase()))
   if (matches.length === 0) throw new Error(`No item title matches "${ref}"`)
@@ -339,6 +350,33 @@ function cmdShow(positional) {
   if (item.body) console.log(`\n${item.body}`)
 }
 
+// Post a progress note to an item. Issue/PR-backed items get a real GitHub
+// comment (the activity log); draft items get the note appended to their body.
+function postProgress(item, body) {
+  if (item.typename === 'Issue' || item.typename === 'PullRequest') {
+    if (!item.contentId) throw new Error(`Cannot resolve the issue node id for "${item.title}".`)
+    gql(`mutation {
+      addComment(input: { subjectId: ${JSON.stringify(item.contentId)}, body: ${JSON.stringify(body)} }) {
+        commentEdge { node { url } }
+      }
+    }`)
+    return `Commented on #${item.number}: ${item.title}${item.url ? `\n  ${item.url}` : ''}`
+  }
+  // Draft issue: no comment stream — append a dated progress note to the body.
+  if (item.typename === 'DraftIssue') {
+    if (!item.contentId) throw new Error(`Cannot resolve the draft id for "${item.title}".`)
+    const stamp = new Date().toISOString().slice(0, 10)
+    const appended = `${item.body ? item.body + '\n\n' : ''}---\n**Progress (${stamp}):** ${body}`
+    gql(`mutation {
+      updateProjectV2DraftIssue(input: { draftIssueId: ${JSON.stringify(item.contentId)}, body: ${JSON.stringify(appended)} }) {
+        draftIssue { id }
+      }
+    }`)
+    return `Appended progress note to draft: ${item.title} (it has no GitHub comment stream)`
+  }
+  throw new Error(`Don't know how to log progress for item type "${item.typename}".`)
+}
+
 function cmdSet(positional, flags) {
   const items = fetchItems()
   const item = resolveItem(items, positional[0])
@@ -350,8 +388,20 @@ function cmdSet(positional, flags) {
       changed++
     }
   }
-  if (changed === 0) throw new Error('set needs at least one field flag (e.g. --status "In progress").')
-  console.log(`Updated ${changed} field(s) on: ${item.title}`)
+  const note = flags.note && flags.note !== true ? flags.note : null
+  if (changed === 0 && !note) {
+    throw new Error('set needs at least one field flag (e.g. --status "In progress") or a --note.')
+  }
+  if (changed > 0) console.log(`Updated ${changed} field(s) on: ${item.title}`)
+  if (note) console.log(postProgress(item, note))
+}
+
+function cmdLog(positional, flags) {
+  const items = fetchItems()
+  const item = resolveItem(items, positional[0])
+  const body = flags.body && flags.body !== true ? flags.body : positional[1]
+  if (!body) throw new Error('log needs a message: --body "what was done" (or a quoted message after the item).')
+  console.log(postProgress(item, body))
 }
 
 function cmdFields() {
@@ -372,11 +422,12 @@ const HELP = `Tournamate roadmap CLI
   list   List items, optionally filtered (--status/--area/--timeframe/--priority/--source, --json).
   pull   Show top actionable items (Unplanned/Scheduled) ranked by Priority then Value.
   show   Show one item in full (by id or title substring).
-  set    Update fields on an existing item (by id or title substring).
+  set    Update fields on an existing item (by id or title substring). Add --note "..." to also log a progress comment.
+  log    Post a progress comment to an item's GitHub issue (drafts: appended to the body). Needs --body "...".
   fields List all fields and their select options.
 
 Field flags: --area --priority --effort --value --timeframe --status --source
-             --estimate (number) --unit --start (YYYY-MM-DD) --target --acceptance --deps --body
+             --estimate (number) --unit --start (YYYY-MM-DD) --target --acceptance --deps --body --note
 Run "node scripts/roadmap.mjs fields" to see valid select values.`
 
 const { flags, positional } = parseArgs(process.argv.slice(2))
@@ -389,6 +440,8 @@ try {
     case 'pull': cmdPull(flags); break
     case 'show': cmdShow(positional); break
     case 'set': cmdSet(positional, flags); break
+    case 'log':
+    case 'comment': cmdLog(positional, flags); break
     case 'fields': cmdFields(); break
     case undefined:
     case 'help':
