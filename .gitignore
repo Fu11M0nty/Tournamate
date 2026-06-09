@@ -53,3 +53,6 @@ next-env.d.ts
 /data/Help Pages/
 /data/Help Pages/*
 
+
+# Microsoft Office temporary owner/lock files
+~$*
