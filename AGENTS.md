@@ -281,6 +281,23 @@ Mobile typecheck: `npx tsc --noEmit -p mobile/tsconfig.json`.
 
 ---
 
+## Roadmap
+
+Feature ideas and planning live in a **GitHub Projects v2** board (private), not in this repo. Assistants can post items to it and pull work from it via [`scripts/roadmap.mjs`](scripts/roadmap.mjs). Full guide: [`docs/roadmap.md`](docs/roadmap.md).
+
+```bash
+node scripts/roadmap.mjs pull            # next actionable items, ranked Priority→Value
+node scripts/roadmap.mjs add --title "..." --area Admin --priority High --acceptance "..."
+node scripts/roadmap.mjs set "<title>" --status "In progress"
+node scripts/roadmap.mjs fields          # valid field/option values
+```
+
+- When asked to capture an idea, **add** it (defaults: Status `Unplanned`, Timeframe `Backlog`); set `--source` to the assistant in use.
+- When asked to work from the roadmap, **pull**, set the item `In progress`, satisfy its **Acceptance criteria**, then set `Completed`.
+- On Windows, prefer PowerShell — Git-Bash mangles args that start with `/` (see the gotcha in `docs/roadmap.md`).
+
+---
+
 ## Environment variables
 
 ```
