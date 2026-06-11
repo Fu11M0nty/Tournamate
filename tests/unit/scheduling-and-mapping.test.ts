@@ -32,6 +32,7 @@ function tournament(overrides: Partial<Tournament> = {}): Tournament {
     display_order: 1,
     courts: [],
     schedule_locked: false,
+    schedule_mode: 'event_day',
     created_by: 'user-1',
     sport: 'Netball',
     sport_other: null,

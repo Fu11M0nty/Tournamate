@@ -70,6 +70,7 @@ export default function DivisionEditForm({
   })
 
   const supabase = useMemo(() => createClient(), [])
+  const isMultiWeek = tournament.schedule_mode === 'multi_week'
   const dayOptions = Array.from(
     new Set([...legacyDaysForTournament(tournament), division?.day].filter(Boolean))
   ) as Day[]
@@ -235,27 +236,29 @@ export default function DivisionEditForm({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label
-                htmlFor="ag-day"
-                className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-              >
-                Day
-              </label>
-              <select
-                id="ag-day"
-                value={day}
-                onChange={(e) => setDay(e.target.value as Day)}
-                className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-mk-red focus:outline-none focus:ring-1 focus:ring-mk-red dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
-              >
-                {dayOptions.map((d) => (
-                  <option key={d} value={d}>
-                    {labelForLegacyDay(tournament, d)}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div className={isMultiWeek ? '' : 'grid grid-cols-2 gap-3'}>
+            {!isMultiWeek && (
+              <div>
+                <label
+                  htmlFor="ag-day"
+                  className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+                >
+                  Day
+                </label>
+                <select
+                  id="ag-day"
+                  value={day}
+                  onChange={(e) => setDay(e.target.value as Day)}
+                  className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-mk-red focus:outline-none focus:ring-1 focus:ring-mk-red dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                >
+                  {dayOptions.map((d) => (
+                    <option key={d} value={d}>
+                      {labelForLegacyDay(tournament, d)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div>
               <label
                 htmlFor="ag-order"

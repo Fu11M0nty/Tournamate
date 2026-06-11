@@ -13,6 +13,7 @@ drop table if exists teams cascade;
 drop table if exists courts cascade;
 drop table if exists phase_elements cascade;
 drop table if exists pools cascade;
+drop table if exists league_schedule_settings cascade;
 drop table if exists phases cascade;
 drop table if exists age_groups cascade;
 drop table if exists competition_dates cascade;
@@ -32,6 +33,7 @@ create table tournaments (
   display_order int not null default 0,
   courts        text[] not null default '{}',
   schedule_locked boolean not null default false,
+  schedule_mode text not null default 'event_day',
   sport         text,
   sport_other   text,
   default_scoring_system_id uuid,
@@ -42,7 +44,8 @@ create table tournaments (
   description   text,
   is_public     boolean not null default true,
   created_at    timestamptz not null default now(),
-  check (status in ('upcoming', 'live', 'complete'))
+  check (status in ('upcoming', 'live', 'complete')),
+  check (schedule_mode in ('event_day', 'multi_week'))
 );
 
 -- ---------------------------------------------------------------------------
@@ -60,8 +63,17 @@ create table tournament_venues (
   country       text,
   notes         text,
   display_order int not null default 1,
+  available_from text not null default '09:00',
+  available_to   text not null default '17:00',
+  court_count    int  not null default 1,
+  playable_weekdays int[] not null default '{}',
   created_at    timestamptz not null default now(),
-  check (display_order > 0)
+  check (display_order > 0),
+  check (available_from ~ '^[0-2][0-9]:[0-5][0-9]$'),
+  check (available_to   ~ '^[0-2][0-9]:[0-5][0-9]$'),
+  check (available_to > available_from),
+  check (court_count > 0),
+  check (playable_weekdays <@ array[0, 1, 2, 3, 4, 5, 6])
 );
 
 create index tournament_venues_tournament_id_idx on tournament_venues(tournament_id);
@@ -150,6 +162,36 @@ create table phases (
 );
 
 create index phases_age_group_id_idx on phases(age_group_id);
+
+-- ---------------------------------------------------------------------------
+-- league_schedule_settings (phase-level multi-week scheduler configuration)
+-- ---------------------------------------------------------------------------
+create table league_schedule_settings (
+  phase_id uuid primary key references phases(id) on delete cascade,
+  start_date date not null,
+  end_date date not null,
+  playable_weekdays int[] not null default '{}',
+  venue_mode text not null default 'neutral_venues',
+  max_games_per_team_per_week int,
+  min_gap_minutes int not null default 0,
+  prefer_round_order boolean not null default true,
+  prefer_home_away_balance boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  check (end_date >= start_date),
+  check (venue_mode in ('neutral_venues', 'home_team_venues', 'mixed')),
+  check (
+    max_games_per_team_per_week is null
+    or max_games_per_team_per_week > 0
+  ),
+  check (min_gap_minutes >= 0),
+  check (
+    playable_weekdays <@ array[0, 1, 2, 3, 4, 5, 6]
+  )
+);
+
+create index league_schedule_settings_start_end_idx
+  on league_schedule_settings(start_date, end_date);
 
 create or replace function ensure_default_phase_for_age_group()
 returns trigger
@@ -385,6 +427,10 @@ create table teams (
   short_name   text,
   color        text,
   logo_url     text,
+  home_venue_name text,
+  home_venue_address text,
+  home_venue_postcode text,
+  home_venue_notes text,
   age_group_id uuid not null references age_groups(id) on delete cascade,
   deleted_at   timestamptz,
   created_at   timestamptz not null default now()
@@ -684,6 +730,7 @@ alter table tournament_venues enable row level security;
 alter table competition_dates enable row level security;
 alter table age_groups      enable row level security;
 alter table phases         enable row level security;
+alter table league_schedule_settings enable row level security;
 alter table pools          enable row level security;
 alter table phase_elements enable row level security;
 alter table courts          enable row level security;
@@ -701,6 +748,7 @@ create policy "tournament_venues_anon_select" on tournament_venues for select to
 create policy "competition_dates_anon_select" on competition_dates for select to anon      using (true);
 create policy "age_groups_anon_select"      on age_groups      for select to anon          using (true);
 create policy "phases_anon_select"          on phases          for select to anon          using (true);
+create policy "league_schedule_settings_anon_select" on league_schedule_settings for select to anon using (true);
 create policy "pools_anon_select"           on pools           for select to anon          using (true);
 create policy "phase_elements_anon_select"  on phase_elements  for select to anon          using (true);
 create policy "teams_anon_select"           on teams           for select to anon          using (true);
@@ -718,6 +766,7 @@ create policy "tournament_venues_auth_select" on tournament_venues for select to
 create policy "competition_dates_auth_select" on competition_dates for select to authenticated using (true);
 create policy "age_groups_auth_select"      on age_groups      for select to authenticated using (true);
 create policy "phases_auth_select"          on phases          for select to authenticated using (true);
+create policy "league_schedule_settings_auth_select" on league_schedule_settings for select to authenticated using (true);
 create policy "pools_auth_select"           on pools           for select to authenticated using (true);
 create policy "phase_elements_auth_select"  on phase_elements  for select to authenticated using (true);
 create policy "teams_auth_select"           on teams           for select to authenticated using (true);
@@ -752,6 +801,10 @@ create policy "age_groups_auth_delete"      on age_groups      for delete to aut
 create policy "phases_auth_insert"          on phases          for insert to authenticated with check (true);
 create policy "phases_auth_update"          on phases          for update to authenticated using (true) with check (true);
 create policy "phases_auth_delete"          on phases          for delete to authenticated using (true);
+
+create policy "league_schedule_settings_auth_insert" on league_schedule_settings for insert to authenticated with check (true);
+create policy "league_schedule_settings_auth_update" on league_schedule_settings for update to authenticated using (true) with check (true);
+create policy "league_schedule_settings_auth_delete" on league_schedule_settings for delete to authenticated using (true);
 
 create policy "pools_auth_insert"           on pools           for insert to authenticated with check (true);
 create policy "pools_auth_update"           on pools           for update to authenticated using (true) with check (true);

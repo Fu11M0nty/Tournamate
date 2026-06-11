@@ -7,6 +7,7 @@ import AdminMatchList from '@/components/AdminMatchList'
 import AdminTeamList from '@/components/AdminTeamList'
 import AdminFixtureMatrix from '@/components/AdminFixtureMatrix'
 import AdminImport from '@/components/AdminImport'
+import AdminMultiWeekScheduleView from '@/components/AdminMultiWeekScheduleView'
 import AdminScheduleView from '@/components/AdminScheduleView'
 import AdminDivisionList from '@/components/AdminDivisionList'
 import AdminTournamentLanding from '@/components/AdminTournamentLanding'
@@ -573,12 +574,20 @@ export default function AdminPage() {
         ) : activePanel === 'schedule' ? (
           <section className="px-4 pt-5">
             {activeTournament ? (
-              <AdminScheduleView
-                tournament={activeTournament}
-                ageGroups={ageGroups}
-                onClose={() => setActivePanel('match-entry')}
-                onTournamentChanged={loadTournaments}
-              />
+              (activeTournament.schedule_mode ?? 'event_day') === 'multi_week' ? (
+                <AdminMultiWeekScheduleView
+                  tournament={activeTournament}
+                  ageGroups={ageGroups}
+                  onClose={() => setActivePanel('match-entry')}
+                />
+              ) : (
+                <AdminScheduleView
+                  tournament={activeTournament}
+                  ageGroups={ageGroups}
+                  onClose={() => setActivePanel('match-entry')}
+                  onTournamentChanged={loadTournaments}
+                />
+              )
             ) : (
               <p className="rounded-lg border border-dashed border-zinc-300 bg-white p-6 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-400">
                 Tournament not found.

@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react'
 import TeamLogo from '@/components/TeamLogo'
+import { findDuplicateMatchIds } from '@/lib/matches'
 import { forfeitSide, pointsForMatch } from '@/lib/standings'
 import { formatKickoffTime } from '@/lib/time'
 import type { Match, ScoringSystem, Team } from '@/lib/types'
@@ -73,6 +74,8 @@ export default function AdminFixtureMatrix({
     }
     return map
   }, [matches])
+
+  const duplicateIds = useMemo(() => findDuplicateMatchIds(matches), [matches])
 
   const courtConflictIds = useMemo(() => {
     const scope = dayMatches && dayMatches.length > 0 ? dayMatches : matches
@@ -213,7 +216,7 @@ export default function AdminFixtureMatrix({
                   )
                 }
                 const match = pairMatches[0]
-                const duplicate = pairMatches.length > 1
+                const duplicate = pairMatches.some((m) => duplicateIds.has(m.id))
                 const completed = match.status === 'completed'
                 const anyCourtClash = pairMatches.some((m) => courtConflictIds.has(m.id))
                 const anyBackToBack = pairMatches.some((m) => backToBackIds.has(m.id))
