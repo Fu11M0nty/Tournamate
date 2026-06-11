@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import AddressAutocomplete from '@/components/AddressAutocomplete'
+import HelpPrompt from '@/components/help/HelpPrompt'
 import {
   type CompetitionDateInput,
   syncTournamentCompetitionDates,
@@ -708,8 +709,9 @@ export default function AdminTournamentGeneral({
       )}
 
       <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-        <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-50">
+        <h2 className="flex items-center gap-2 text-base font-bold text-zinc-900 dark:text-zinc-50">
           Tournament details
+          <HelpPrompt guideSlug="create-tournament" label="tournament details" tip="How the name, slug, status, and branding work" />
         </h2>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
@@ -797,8 +799,9 @@ export default function AdminTournamentGeneral({
       </section>
 
       <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-        <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-50">
+        <h2 className="flex items-center gap-2 text-base font-bold text-zinc-900 dark:text-zinc-50">
           Scheduling mode
+          <HelpPrompt guideSlug="scheduling-modes" label="scheduling modes" tip="Event days vs multi-week league — which to pick" />
         </h2>
         <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
           Choose one scheduling model for this tournament. Mixing modes is not available in V1.
@@ -949,11 +952,12 @@ export default function AdminTournamentGeneral({
       <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-50">
+            <h2 className="flex items-center gap-2 text-base font-bold text-zinc-900 dark:text-zinc-50">
               Venues{' '}
               {scheduleMode === 'multi_week' && (
                 <span className="font-normal text-zinc-400">(optional)</span>
               )}
+              <HelpPrompt guideSlug="dates-and-venues" label="venues" tip="Adding venues with address lookup" />
             </h2>
             <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
               {scheduleMode === 'multi_week'

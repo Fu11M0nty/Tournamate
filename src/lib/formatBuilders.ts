@@ -1110,6 +1110,27 @@ export function defaultFormatBuilderOptions(
   }
 }
 
+/**
+ * The number of placeholder teams a template needs, derived from the current
+ * options. Mirrors the count shown on the wizard's Teams step so generation
+ * doesn't depend on the organiser having *changed* the default value.
+ *
+ * Priority: an explicit count (expectedTeamCount/teamCount) → the pool-derived
+ * count (pools × teamsPerPool) → a sensible fallback of 8.
+ */
+export function resolvePlaceholderTeamCount(
+  builder: FormatBuilderTemplate,
+  options: FormatBuilderOptions
+): number {
+  const cfg = builder.configurable
+  const poolDerived = cfg?.teamsPerPool
+    ? (options.poolCount ?? cfg.pools?.defaultValue ?? cfg.pools?.min ?? 1) *
+      (options.teamsPerPool ?? cfg.teamsPerPool.defaultValue ?? cfg.teamsPerPool.min ?? 8)
+    : null
+  const resolved = options.expectedTeamCount ?? options.teamCount ?? poolDerived ?? 8
+  return clamp(resolved, 2, 512)
+}
+
 export function resolveFormatBuilder(
   builder: FormatBuilderTemplate,
   options: FormatBuilderOptions = {}

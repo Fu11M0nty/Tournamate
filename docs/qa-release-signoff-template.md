@@ -23,8 +23,8 @@ Use this template for a pre-production or release-candidate QA sign-off.
 | Unit tests | `npm run test:unit` | Pass |  |  |
 | DB integration | `npm run qa:db` | 11 pass |  |  |
 | Public browser smoke | `npm run qa:public` | 18 pass, 0 skip |  |  |
-| Admin browser smoke | `npm run qa:admin` | 15 pass, 11 skip |  |  |
-| Browser smoke | `npm run qa:e2e` | 33 pass, 11 skip |  |  |
+| Admin browser smoke | `npm run qa:admin` | 20 pass, 14 skip |  |  |
+| Browser smoke | `npm run qa:e2e` | 38 pass, 14 skip |  |  |
 | Release gate | `npm run qa:release` | Pass |  |  |
 
 Evidence report:
@@ -64,6 +64,15 @@ playwright-report/index.html
 | Schedule panel | Court 1, Court 2 and planned fixtures show correctly |  |  |
 | Scoring panel | QA scoring system is visible |  |  |
 | Safe admin workflows | General edits, disposable division/team changes, format picker, fixture controls, pool assignment locking, scoring template edits, score entry and schedule edits complete without changing public smoke fixtures |  |  |
+| Admin Help panel | Help guides open, search works, a contextual "i" prompt deep-links to the right guide, and print control is present |  |  |
+
+## Documentation Freshness
+
+| Check | Expected | Result | Notes |
+| --- | --- | --- | --- |
+| Help guides match the product | Guides in `src/lib/helpContent.ts` describe the admin workflows shipped in this release (spot-check any area changed since last release) |  |  |
+| Screenshots are current | If any admin screen covered by `public/help/screenshots/` changed in this release, `npm run docs:screenshots` has been re-run and the refreshed assets committed |  |  |
+| Contextual prompts resolve | Every `HelpPrompt` target opens an existing guide (covered by unit tests — confirm `npm run test:unit` passed) |  |  |
 
 ## Defects And Risks
 

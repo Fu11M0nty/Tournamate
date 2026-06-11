@@ -6,9 +6,11 @@ import {
   FORMAT_BUILDERS,
   defaultFormatBuilderOptions,
   applyFormatBuilder,
+  resolvePlaceholderTeamCount,
   type FormatBuilderOptions,
 } from '@/lib/formatBuilders'
 import { generateStructureFixtures } from '@/lib/matches'
+import HelpPrompt from './help/HelpPrompt'
 import Step1TemplatePicker from './wizard/Step1TemplatePicker'
 import Step2Configure from './wizard/Step2Configure'
 import Step3Teams from './wizard/Step3Teams'
@@ -167,11 +169,31 @@ export default function StructureWizard({
         resolvedByeTeamIds = state.byeSelections
       }
 
+      // In placeholder mode the organiser may leave the team count at its
+      // default (never firing SET_TEAM_COUNT), so expectedTeamCount can still be
+      // null. Resolve it from the current options so placeholder teams — and
+      // therefore fixtures — are always generated.
+      const optionsForApply: FormatBuilderOptions = {
+        ...state.options,
+        byeTeamIds: resolvedByeTeamIds,
+      }
+      if (
+        state.usePlaceholders &&
+        existingTeams.length === 0 &&
+        optionsForApply.expectedTeamCount == null &&
+        selectedBuilder
+      ) {
+        optionsForApply.expectedTeamCount = resolvePlaceholderTeamCount(
+          selectedBuilder,
+          state.options
+        )
+      }
+
       const result = await applyFormatBuilder(
         supabase as Parameters<typeof applyFormatBuilder>[0],
         division,
         state.builderId,
-        { ...state.options, byeTeamIds: resolvedByeTeamIds }
+        optionsForApply
       )
 
       if (result.error) {
@@ -243,6 +265,9 @@ export default function StructureWizard({
             </div>
           )
         })}
+        <span className="ml-1">
+          <HelpPrompt guideSlug="choose-format" label="the format wizard" tip="What each wizard step does" />
+        </span>
       </nav>
 
       {/* Step content */}

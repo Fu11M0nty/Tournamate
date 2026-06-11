@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { createClient } from '@/lib/supabase'
+import HelpPrompt from '@/components/help/HelpPrompt'
 
 interface SnapshotEntry {
   backed_up_at: string
@@ -110,7 +111,10 @@ export default function SnapshotView() {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-50">Snapshots</h2>
+        <h2 className="flex items-center gap-2 text-xl font-bold text-zinc-900 dark:text-zinc-50">
+          Snapshots
+          <HelpPrompt guideSlug="snapshots" label="snapshots" tip="Point-in-time backups and how to restore them" />
+        </h2>
         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
           Read-only view of saved match backups. Select a snapshot to inspect it.
         </p>
