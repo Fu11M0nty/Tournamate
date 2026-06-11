@@ -67,6 +67,17 @@ function matchTimeValue(match: Match) {
   return new Date(match.kickoff_time).getTime()
 }
 
+function scheduleDateKey(iso: string): string {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date(iso))
+  const byType = new Map(parts.map((part) => [part.type, part.value]))
+  return `${byType.get('year')}-${byType.get('month')}-${byType.get('day')}`
+}
+
 function Select({
   label,
   value,
@@ -180,6 +191,19 @@ export default function TournamentLandingHub({
       }
       return matchTimeValue(a) - matchTimeValue(b)
     })
+
+  const visibleScheduleByDate = useMemo(() => {
+    const byDate = new Map<string, Match[]>()
+    for (const match of visibleSchedule) {
+      const key = scheduleDateKey(match.kickoff_time)
+      const list = byDate.get(key) ?? []
+      list.push(match)
+      byDate.set(key, list)
+    }
+    return Array.from(byDate.entries()).sort(([a], [b]) =>
+      scheduleMode === 'played' ? b.localeCompare(a) : a.localeCompare(b)
+    )
+  }, [scheduleMode, visibleSchedule])
 
   function toggleFollow(teamId: string) {
     setFollowedTeamIds((current) =>
@@ -456,45 +480,55 @@ export default function TournamentLandingHub({
           {visibleSchedule.length === 0 ? (
             <EmptyState>No fixtures match the current filters.</EmptyState>
           ) : (
-            <div className="space-y-2">
-              {visibleSchedule.map((match) => {
-                const group = groupsById.get(match.age_group_id)
-                const home = match.home_team_id ? teamsById.get(match.home_team_id) : null
-                const away = match.away_team_id ? teamsById.get(match.away_team_id) : null
-                const score =
-                  match.status === 'completed' && match.home_score !== null && match.away_score !== null
-                    ? `${match.home_score} - ${match.away_score}`
-                    : 'vs'
-                return (
-                  <article key={match.id} className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-100 pb-2 text-xs font-semibold text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
-                      <span>
-                        {formatKickoffTime(match.kickoff_time)} - {formatKickoffDate(match.kickoff_time)}
-                      </span>
-                      <span>
-                        {group ? `${group.name}` : 'Division TBC'}{match.court ? ` - ${match.court}` : ''}
-                      </span>
-                    </div>
-                    <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-                      <div className="flex min-w-0 items-center gap-2">
-                        {home ? <TeamLogo team={home} size="sm" /> : null}
-                        <span className="truncate text-sm font-bold text-zinc-800 dark:text-zinc-100">
-                          {home?.name ?? 'TBD'}
-                        </span>
-                      </div>
-                      <span className={match.status === 'completed' ? 'rounded-md bg-tm-navy px-2 py-1 text-sm font-black tabular-nums text-white' : 'text-xs font-black uppercase tracking-wider text-zinc-400'}>
-                        {score}
-                      </span>
-                      <div className="flex min-w-0 items-center justify-end gap-2">
-                        <span className="truncate text-right text-sm font-bold text-zinc-800 dark:text-zinc-100">
-                          {away?.name ?? 'TBD'}
-                        </span>
-                        {away ? <TeamLogo team={away} size="sm" /> : null}
-                      </div>
-                    </div>
-                  </article>
-                )
-              })}
+            <div className="space-y-5">
+              {visibleScheduleByDate.map(([dateKey, dateMatches]) => (
+                <section key={dateKey} className="space-y-2">
+                  <h2 className="text-xs font-extrabold uppercase tracking-[0.25em] text-tm-orange">
+                    {formatKickoffDate(`${dateKey}T12:00:00.000Z`, {
+                      weekday: 'long',
+                      day: 'numeric',
+                      month: 'long',
+                      year: 'numeric',
+                    })}
+                  </h2>
+                  {dateMatches.map((match) => {
+                    const group = groupsById.get(match.age_group_id)
+                    const home = match.home_team_id ? teamsById.get(match.home_team_id) : null
+                    const away = match.away_team_id ? teamsById.get(match.away_team_id) : null
+                    const score =
+                      match.status === 'completed' && match.home_score !== null && match.away_score !== null
+                        ? `${match.home_score} - ${match.away_score}`
+                        : 'vs'
+                    return (
+                      <article key={match.id} className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-100 pb-2 text-xs font-semibold text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+                          <span>{formatKickoffTime(match.kickoff_time)}</span>
+                          <span>
+                            {group ? `${group.name}` : 'Division TBC'}{match.court ? ` - ${match.court}` : ''}
+                          </span>
+                        </div>
+                        <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+                          <div className="flex min-w-0 items-center gap-2">
+                            {home ? <TeamLogo team={home} size="sm" /> : null}
+                            <span className="truncate text-sm font-bold text-zinc-800 dark:text-zinc-100">
+                              {home?.name ?? 'TBD'}
+                            </span>
+                          </div>
+                          <span className={match.status === 'completed' ? 'rounded-md bg-tm-navy px-2 py-1 text-sm font-black tabular-nums text-white' : 'text-xs font-black uppercase tracking-wider text-zinc-400'}>
+                            {score}
+                          </span>
+                          <div className="flex min-w-0 items-center justify-end gap-2">
+                            <span className="truncate text-right text-sm font-bold text-zinc-800 dark:text-zinc-100">
+                              {away?.name ?? 'TBD'}
+                            </span>
+                            {away ? <TeamLogo team={away} size="sm" /> : null}
+                          </div>
+                        </div>
+                      </article>
+                    )
+                  })}
+                </section>
+              ))}
             </div>
           )}
         </section>

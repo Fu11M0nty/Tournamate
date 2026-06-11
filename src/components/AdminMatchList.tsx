@@ -6,6 +6,7 @@ import TeamLogo from './TeamLogo'
 import MatchScoresheetCapture from './MatchScoresheetCapture'
 import MatchOfficialAssignmentDialog from './MatchOfficialAssignmentDialog'
 import { createClient } from '@/lib/supabase'
+import { findDuplicateMatchIds } from '@/lib/matches'
 import { forfeitSide } from '@/lib/standings'
 import { formatKickoffTime } from '@/lib/time'
 import type { ElementSlot, Match, Team } from '@/lib/types'
@@ -113,23 +114,7 @@ export default function AdminMatchList({
     [sorted, filterTeamId]
   )
 
-  const duplicateIds = useMemo(() => {
-    const byPair = new Map<string, string[]>()
-    for (const m of matches) {
-      const key = [
-        m.home_team_id ?? `slot:${m.home_slot_id ?? 'home'}`,
-        m.away_team_id ?? `slot:${m.away_slot_id ?? 'away'}`,
-      ].sort().join('|')
-      const arr = byPair.get(key) ?? []
-      arr.push(m.id)
-      byPair.set(key, arr)
-    }
-    const dupes = new Set<string>()
-    for (const arr of byPair.values()) {
-      if (arr.length > 1) arr.forEach((id) => dupes.add(id))
-    }
-    return dupes
-  }, [matches])
+  const duplicateIds = useMemo(() => findDuplicateMatchIds(matches), [matches])
 
   const editingMatch = editingId
     ? sorted.find((m) => m.id === editingId) ?? null

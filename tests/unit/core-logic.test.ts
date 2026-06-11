@@ -56,6 +56,10 @@ function team(id: string, name: string): Team {
     short_name: null,
     color: null,
     logo_url: null,
+    home_venue_name: null,
+    home_venue_address: null,
+    home_venue_postcode: null,
+    home_venue_notes: null,
     age_group_id: 'division-1',
     deleted_at: null,
   }

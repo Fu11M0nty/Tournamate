@@ -30,6 +30,7 @@ type TournamentRow = {
   slug: string
   name: string
   is_public: boolean | null
+  schedule_mode: string
 }
 
 type DivisionRow = {
@@ -135,7 +136,7 @@ describe('QA seeded database', () => {
     const tournamentRows = await expectData<TournamentRow[]>(
       await service
         .from('tournaments')
-        .select('id, slug, name, is_public')
+        .select('id, slug, name, is_public, schedule_mode')
         .eq('slug', qaSlug())
         .order('created_at', { ascending: false }),
       'Load QA tournament'
@@ -158,6 +159,7 @@ describe('QA seeded database', () => {
       slug: qaSlug(),
       name: 'QA Smoke Tournament',
       is_public: true,
+      schedule_mode: 'event_day',
     })
 
     const [dates, venues, courts] = await Promise.all([
@@ -480,6 +482,99 @@ describe('QA seeded database', () => {
       expect(deleteResult.error).toBeNull()
     } finally {
       await anon.auth.signOut()
+      await service.from('teams').delete().eq('age_group_id', division.id).eq('name', teamName)
+    }
+  })
+
+  it('allows the approved QA admin to manage multi-week scheduler data', async () => {
+    const division = expectPresent(divisions.get('qa-workflow'), 'Missing qa-workflow division')
+    const email = process.env.QA_ADMIN_EMAIL || process.env.E2E_ADMIN_EMAIL || 'qa-admin@tournamate.test'
+    const password = process.env.QA_ADMIN_PASSWORD || process.env.E2E_ADMIN_PASSWORD || 'Tournamate-QA-Admin-123!'
+    const teamName = 'QA DB Multi-Week Venue Team'
+
+    const phases = await expectData<Array<{ id: string }>>(
+      await service
+        .from('phases')
+        .select('id')
+        .eq('age_group_id', division.id)
+        .limit(1),
+      'Load workflow phase for multi-week settings'
+    )
+    const phase = expectExactlyOne(phases, 'Workflow phase for multi-week settings')
+
+    await service.from('league_schedule_settings').delete().eq('phase_id', phase.id)
+    await service.from('teams').delete().eq('age_group_id', division.id).eq('name', teamName)
+
+    const { error: signInError } = await anon.auth.signInWithPassword({ email, password })
+    expect(signInError).toBeNull()
+
+    try {
+      const insertedTeam = await expectData<Array<{
+        id: string
+        home_venue_name: string | null
+        home_venue_postcode: string | null
+      }>>(
+        await anon
+          .from('teams')
+          .insert({
+            age_group_id: division.id,
+            name: teamName,
+            short_name: 'QAMW',
+            color: '#f47c20',
+            home_venue_name: 'QA League Hall',
+            home_venue_address: '1 QA Road',
+            home_venue_postcode: 'QA1 1MW',
+            home_venue_notes: 'Use side entrance',
+          })
+          .select('id, home_venue_name, home_venue_postcode'),
+        'Authenticated admin inserts team home venue fields'
+      )
+      const team = expectExactlyOne(insertedTeam, 'Inserted multi-week venue team')
+      expect(team.home_venue_name).toBe('QA League Hall')
+      expect(team.home_venue_postcode).toBe('QA1 1MW')
+
+      const insertedSettings = await expectData<Array<{
+        phase_id: string
+        venue_mode: string
+        playable_weekdays: number[]
+      }>>(
+        await anon
+          .from('league_schedule_settings')
+          .insert({
+            phase_id: phase.id,
+            start_date: '2026-06-09',
+            end_date: '2026-07-14',
+            playable_weekdays: [2],
+            venue_mode: 'home_team_venues',
+            max_games_per_team_per_week: 1,
+          })
+          .select('phase_id, venue_mode, playable_weekdays'),
+        'Authenticated admin inserts multi-week settings'
+      )
+      expect(expectExactlyOne(insertedSettings, 'Inserted multi-week settings')).toMatchObject({
+        phase_id: phase.id,
+        venue_mode: 'home_team_venues',
+        playable_weekdays: [2],
+      })
+
+      const updatedSettings = await expectData<Array<{ venue_mode: string; playable_weekdays: number[] }>>(
+        await anon
+          .from('league_schedule_settings')
+          .update({ venue_mode: 'mixed', playable_weekdays: [2, 6] })
+          .eq('phase_id', phase.id)
+          .select('venue_mode, playable_weekdays'),
+        'Authenticated admin updates multi-week settings'
+      )
+      expect(expectExactlyOne(updatedSettings, 'Updated multi-week settings')).toMatchObject({
+        venue_mode: 'mixed',
+        playable_weekdays: [2, 6],
+      })
+
+      expect((await anon.from('league_schedule_settings').delete().eq('phase_id', phase.id)).error).toBeNull()
+      expect((await anon.from('teams').delete().eq('id', team.id)).error).toBeNull()
+    } finally {
+      await anon.auth.signOut()
+      await service.from('league_schedule_settings').delete().eq('phase_id', phase.id)
       await service.from('teams').delete().eq('age_group_id', division.id).eq('name', teamName)
     }
   })
