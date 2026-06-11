@@ -13,6 +13,7 @@ import {
   useSensors,
 } from '@dnd-kit/core'
 import toast from 'react-hot-toast'
+import HelpPrompt from '@/components/help/HelpPrompt'
 import { createClient } from '@/lib/supabase'
 import { regenerateUnplannedFixtures } from '@/lib/actions'
 import {
@@ -1676,8 +1677,9 @@ export default function AdminScheduleView({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-50">
+        <h2 className="flex items-center gap-2 text-xl font-bold text-zinc-900 dark:text-zinc-50">
           Schedule — {tournament.name}
+          <HelpPrompt guideSlug="schedule-event-day" label="event-day scheduling" tip="Courts, time slots, and auto-plan" />
         </h2>
         <div className="flex items-center gap-2">
           {selectedIds.size > 0 && (
@@ -1763,14 +1765,17 @@ export default function AdminScheduleView({
               </>
             )}
             {tournament.schedule_locked && (
-              <a
-                href={`/admin/scorecards/${day}?t=${tournament.id}`}
-                target="_blank"
-                rel="noreferrer"
-                className="rounded-md border border-violet-300 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-800 shadow-sm hover:bg-violet-100 dark:border-violet-700 dark:bg-violet-950 dark:text-violet-200 dark:hover:bg-violet-900"
-              >
-                🖨️ Print scorecards
-              </a>
+              <>
+                <a
+                  href={`/admin/scorecards/${day}?t=${tournament.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-md border border-violet-300 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-800 shadow-sm hover:bg-violet-100 dark:border-violet-700 dark:bg-violet-950 dark:text-violet-200 dark:hover:bg-violet-900"
+                >
+                  🖨️ Print scorecards
+                </a>
+                <HelpPrompt guideSlug="scorecards" label="printing scorecards" tip="Printable per-match scorecards with QR codes" />
+              </>
             )}
             <button
               type="button"

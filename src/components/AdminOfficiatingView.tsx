@@ -5,6 +5,7 @@ import toast from 'react-hot-toast'
 import { createClient } from '@/lib/supabase'
 import type { Tournament, Umpire, Club } from '@/lib/types'
 import ClubEditForm from './ClubEditForm'
+import HelpPrompt from './help/HelpPrompt'
 import UmpireEditForm from './UmpireEditForm'
 import UmpireTournamentAssignmentDialog from './UmpireTournamentAssignmentDialog'
 
@@ -107,7 +108,10 @@ export default function AdminOfficiatingView({ tournament }: AdminOfficiatingVie
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">Officiating</h2>
+          <h2 className="flex items-center gap-2 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
+            Officiating
+            <HelpPrompt guideSlug="officiating" label="officiating" tip="Registries, tournament rosters, and match assignments" />
+          </h2>
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
             Manage clubs, officials registry, and assignments for {tournament.name}.
           </p>

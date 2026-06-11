@@ -8,29 +8,30 @@ For run commands, environment setup, and evidence locations, use `docs/qa-runboo
 
 | Layer | Command | Test count | Main purpose |
 | --- | --- | ---: | --- |
-| Unit logic | `npm run test:unit` | 31 | Checks pure calculation and mapping logic without Supabase or a browser. |
+| Unit logic | `npm run test:unit` | 88 | Checks pure calculation and mapping logic without Supabase or a browser. |
 | Database integration | `npm run qa:db` | 11 | Seeds real QA data, checks Supabase/RLS behaviour, then cleans up. |
-| Browser E2E | `npm run qa:e2e` | 44 | Seeds QA data, runs public/admin browser workflows, captures screenshots/videos, then cleans up. |
+| Browser E2E | `npm run qa:e2e` | 52 | Seeds QA data, runs public/admin browser workflows, captures screenshots/videos, then cleans up. |
 | Public browser E2E | `npm run qa:public` | 18 | Runs spectator-facing public page checks only. |
-| Admin browser E2E | `npm run qa:admin` | 26 | Runs admin/security browser checks only. |
+| Admin browser E2E | `npm run qa:admin` | 34 | Runs admin/security browser checks only. |
+| Docs screenshots | `npm run docs:screenshots` | 10 (asset run) | Regenerates the admin Help guide screenshots in `public/help/screenshots/` from seeded QA data. Separate Playwright config; never part of the QA gates. |
 | Browser evidence index | `npm run qa:evidence` | Report only | Regenerates the test-by-test screenshot/video/trace index from the latest Playwright JSON results. |
 | Release QA gate | `npm run qa:release` | Composite | Runs typecheck, unit tests, database integration, and the full browser E2E suite. |
 
 Expected browser result:
 
 ```text
-33 passed
-11 skipped
+38 passed
+14 skipped
 ```
 
-The 11 skipped tests are desktop-only admin workflow checks skipped on the mobile browser project. They are expected skips, not failures.
+The 14 skipped tests are desktop-only admin workflow checks skipped on the mobile browser project. They are expected skips, not failures.
 
 Suite-specific browser commands:
 
 ```text
 npm run qa:public  -> 18 passed, 0 skipped
-npm run qa:admin   -> 15 passed, 11 skipped
-npm run qa:e2e     -> 33 passed, 11 skipped
+npm run qa:admin   -> 20 passed, 14 skipped
+npm run qa:e2e     -> 38 passed, 14 skipped
 ```
 
 ## QA Seed Data
@@ -160,6 +161,17 @@ These tests use the `QA Workflow Division` or temporary records and clean up aft
 | E2E-SAFE-008 | Open guided change-format picker | Desktop only; skipped on mobile | Opens the format picker for `QA Format - Two Pools` without applying a new format. | No data mutation. | The picker shows major format choices such as round robin, group-stage finals, knockout, and league season. |
 | E2E-SAFE-009 | View fixture-generation controls | Desktop only; skipped on mobile | Opens Advanced setup for `QA Format - Two Pools`. | No data mutation. | Fixture generation controls for Pool Play and unscheduled-only regeneration are visible. |
 | E2E-SAFE-010 | Pool assignment locking | Desktop only; skipped on mobile | Opens Pool B team assignment in `QA Format - Two Pools`. | No data mutation. | Teams already assigned to Pool A are disabled and labelled with Pool A; Pool B teams remain selectable. |
+
+### Admin Help Centre
+
+These tests cover the admin Help documentation suite and its contextual prompts (`tests/e2e/qa-admin-help.spec.ts`). No data mutation.
+
+| ID | Test | Browser projects | What it checks | Expected result |
+| --- | --- | --- | --- | --- |
+| E2E-HELP-001 | Open Help panel and browse a guide | Desktop only; skipped on mobile | Help panel opens, categories render, the multi-week league guide opens with its content, print control and video placeholder. | Guide content, print button, and labelled video placeholder are visible. |
+| E2E-HELP-002 | Search guides | Desktop only; skipped on mobile | Search box filters the guide list and clears back to the full list. | Matching guides remain; non-matching guides are hidden. |
+| E2E-HELP-003 | Contextual prompt deep-links | Desktop only; skipped on mobile | "i" prompts on the Scoring and General panels open the matching guide in the Help panel. | The expected guide heading is shown after each prompt click. |
+| E2E-HELP-004 | Help panel on mobile viewport | Desktop and mobile | Help panel opens via the mobile nav, a guide renders, print control present. | Help is usable at mobile width on both projects. |
 
 ## Evidence Review Guide
 

@@ -22,6 +22,8 @@ import SnapshotView from '@/components/SnapshotView'
 import SnapshotDialog from '@/components/SnapshotDialog'
 import { createClient } from '@/lib/supabase'
 import { useAdminAuth } from '@/lib/auth-context'
+import { HelpNavigationProvider } from '@/lib/help-context'
+import HelpPrompt from '@/components/help/HelpPrompt'
 import { labelForLegacyDay, legacyDaysForTournament } from '@/lib/competitionDates'
 import type { AgeGroup, Day, Match, Team, Tournament } from '@/lib/types'
 
@@ -60,6 +62,19 @@ export default function AdminPage() {
   const [showSnapshotDialog, setShowSnapshotDialog] = useState(false)
   const [takingSnapshot, setTakingSnapshot] = useState(false)
   const [inactivityLoggedOut, setInactivityLoggedOut] = useState(false)
+  const [helpGuideSlug, setHelpGuideSlug] = useState<string | null>(null)
+
+  // Lets contextual HelpPrompt icons anywhere in the console open the Help
+  // panel at a specific guide.
+  const helpNavigation = useMemo(
+    () => ({
+      openHelpGuide: (slug: string) => {
+        setHelpGuideSlug(slug)
+        setActivePanel('help')
+      },
+    }),
+    []
+  )
 
   // Auto-logout after 10 minutes of inactivity
   useEffect(() => {
@@ -412,6 +427,7 @@ export default function AdminPage() {
 
   // ── Tournament console view ───────────────────────────────────────────────
   return (
+    <HelpNavigationProvider value={helpNavigation}>
     <div className="flex min-h-screen bg-zinc-50 dark:bg-zinc-950">
       {/* Mobile backdrop */}
       {sidebarOpen && (
@@ -619,7 +635,7 @@ export default function AdminPage() {
         ) : activePanel === 'help' ? (
           <section className="px-4 pt-5">
             {activeTournament ? (
-              <AdminHelpView />
+              <AdminHelpView initialGuideSlug={helpGuideSlug} />
             ) : (
               <p className="rounded-lg border border-dashed border-zinc-300 bg-white p-6 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-400">
                 Tournament not found.
@@ -743,8 +759,10 @@ export default function AdminPage() {
               {currentGroup ? (
                 <>
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                    <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-50">
+                    <h2 className="flex items-center gap-2 text-xl font-bold text-zinc-900 dark:text-zinc-50">
                       {currentGroup.name}
+                      <HelpPrompt guideSlug="enter-scores" label="entering scores" tip="Score entry, forfeits, and live standings" />
+                      <HelpPrompt guideSlug="qr-capture" label="QR score capture" tip="Court-side score capture from a phone" />
                     </h2>
                     <div
                       role="tablist"
@@ -842,5 +860,6 @@ export default function AdminPage() {
         />
       )}
     </div>
+    </HelpNavigationProvider>
   )
 }
