@@ -10,6 +10,7 @@ export interface UserProfile {
 }
 
 export type TournamentStatus = 'upcoming' | 'live' | 'complete'
+export type TournamentScheduleMode = 'event_day' | 'multi_week'
 
 export const SPORTS = [
   'Netball',
@@ -41,6 +42,7 @@ export interface Tournament {
   display_order: number
   courts: string[]
   schedule_locked: boolean
+  schedule_mode: TournamentScheduleMode
   created_by: string
   // TournaMate fields — added by add_tournamate_fields.sql migration
   sport?: string | null
@@ -66,6 +68,10 @@ export interface TournamentVenue {
   country: string | null
   notes: string | null
   display_order: number
+  available_from: string
+  available_to: string
+  court_count: number
+  playable_weekdays: number[]
   created_at: string
 }
 
@@ -83,6 +89,7 @@ export interface CompetitionDate {
 export type MatchFormat = 'continuous' | 'halves' | 'quarters'
 export type PhaseType = 'round_robin' | 'group_stage' | 'knockout' | 'league' | 'friendly'
 export type StandingsMode = 'visible' | 'hidden' | 'none'
+export type LeagueVenueMode = 'neutral_venues' | 'home_team_venues' | 'mixed'
 export type PhaseElementType = 'group' | 'bracket' | 'single_match' | 'heat' | 'league_table' | 'ladder' | 'swiss_round'
 export type ElementSlotType = 'team' | 'source' | 'bye' | 'placeholder' | 'manual'
 export type SlotSourceOutcome = 'winner' | 'loser' | 'rank' | 'best_rank' | 'manual'
@@ -160,6 +167,20 @@ export interface Phase {
   created_at: string
   pools?: Pool[]
   phase_elements?: PhaseElement[]
+}
+
+export interface LeagueScheduleSettings {
+  phase_id: string
+  start_date: string
+  end_date: string
+  playable_weekdays: number[]
+  venue_mode: LeagueVenueMode
+  max_games_per_team_per_week: number | null
+  min_gap_minutes: number
+  prefer_round_order: boolean
+  prefer_home_away_balance: boolean
+  created_at: string
+  updated_at: string
 }
 
 export interface Pool {
@@ -265,6 +286,10 @@ export interface Team {
   short_name: string | null
   color: string | null
   logo_url: string | null
+  home_venue_name: string | null
+  home_venue_address: string | null
+  home_venue_postcode: string | null
+  home_venue_notes: string | null
   age_group_id: string
   deleted_at: string | null
 }

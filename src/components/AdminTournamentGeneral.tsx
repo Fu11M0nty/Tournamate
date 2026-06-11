@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
+import AddressAutocomplete from '@/components/AddressAutocomplete'
 import {
   type CompetitionDateInput,
   syncTournamentCompetitionDates,
@@ -14,6 +15,7 @@ import {
   type ScoringSystem,
   type Sport,
   type Tournament,
+  type TournamentScheduleMode,
   type TournamentVenue,
 } from '@/lib/types'
 
@@ -133,9 +135,16 @@ export default function AdminTournamentGeneral({
   const [defaultScoringSystemId, setDefaultScoringSystemId] = useState(
     tournament.default_scoring_system_id ?? ''
   )
+  const [scheduleMode, setScheduleMode] = useState<TournamentScheduleMode>(
+    tournament.schedule_mode ?? 'event_day'
+  )
   const [scoringSystems, setScoringSystems] = useState<ScoringSystem[]>([])
   const [dateRows, setDateRows] = useState<DateRow[]>(() =>
     initialDateRows(tournament)
+  )
+  const [windowStart, setWindowStart] = useState(tournament.start_date ?? '')
+  const [windowEnd, setWindowEnd] = useState(
+    tournament.end_date ?? tournament.start_date ?? ''
   )
   const [venueRows, setVenueRows] = useState<VenueRow[]>(() => {
     if (tournament.venue_name) {
@@ -298,8 +307,7 @@ export default function AdminTournamentGeneral({
       if (error) return error.message
     }
 
-    const payload = rows.map((row, index) => ({
-      ...(row.id ? { id: row.id } : {}),
+    const baseFields = (row: VenueRow, index: number) => ({
       tournament_id: tournament.id,
       name: row.name.trim(),
       address_line1: cleanText(row.address_line1),
@@ -310,15 +318,31 @@ export default function AdminTournamentGeneral({
       country: cleanText(row.country),
       notes: cleanText(row.notes),
       display_order: index + 1,
-    }))
+    })
 
-    if (payload.length === 0) return undefined
+    // Updates (rows with an id) and inserts (new rows) must run separately:
+    // a mixed upsert makes PostgREST send an explicit null id for new rows,
+    // which violates the not-null primary key instead of using its default.
+    const updates = rows
+      .map((row, index) => ({ row, index }))
+      .filter(({ row }) => Boolean(row.id))
+      .map(({ row, index }) => ({ id: row.id as string, ...baseFields(row, index) }))
 
-    const { error } = await supabase
-      .from('tournament_venues')
-      .upsert(payload)
+    const inserts = rows
+      .map((row, index) => ({ row, index }))
+      .filter(({ row }) => !row.id)
+      .map(({ row, index }) => baseFields(row, index))
 
-    return error?.message
+    if (updates.length > 0) {
+      const { error } = await supabase.from('tournament_venues').upsert(updates)
+      if (error) return error.message
+    }
+    if (inserts.length > 0) {
+      const { error } = await supabase.from('tournament_venues').insert(inserts)
+      if (error) return error.message
+    }
+
+    return undefined
   }
 
   async function applyDefaultScoring(scoringSystemId: string) {
@@ -351,6 +375,56 @@ export default function AdminTournamentGeneral({
     return phaseUpdateError?.message
   }
 
+  async function scheduleModeSwitchBlocker(nextMode: TournamentScheduleMode) {
+    if (nextMode === (tournament.schedule_mode ?? 'event_day')) return null
+
+    const { data: divisions, error: divisionsError } = await supabase
+      .from('age_groups')
+      .select('id')
+      .eq('tournament_id', tournament.id)
+
+    if (divisionsError) return divisionsError.message
+
+    const divisionIds = ((divisions ?? []) as { id: string }[]).map((division) => division.id)
+    if (divisionIds.length === 0) return null
+
+    const { data: scheduledMatches, error: matchesError } = await supabase
+      .from('matches')
+      .select('id, status, is_planned')
+      .in('age_group_id', divisionIds)
+      .is('deleted_at', null)
+      .or('is_planned.eq.true,status.eq.completed')
+      .limit(1)
+
+    if (matchesError) return matchesError.message
+    if ((scheduledMatches ?? []).length > 0) {
+      return 'This tournament already has planned or completed fixtures. Unplan fixtures and resolve completed results before switching scheduler mode.'
+    }
+
+    const { data: phases, error: phasesError } = await supabase
+      .from('phases')
+      .select('id')
+      .in('age_group_id', divisionIds)
+
+    if (phasesError) return phasesError.message
+
+    const phaseIds = ((phases ?? []) as { id: string }[]).map((phase) => phase.id)
+    if (phaseIds.length === 0) return null
+
+    const { data: settings, error: settingsError } = await supabase
+      .from('league_schedule_settings')
+      .select('phase_id')
+      .in('phase_id', phaseIds)
+      .limit(1)
+
+    if (settingsError) return settingsError.message
+    if ((settings ?? []).length > 0) {
+      return 'This tournament already has multi-week schedule settings. Remove those settings before switching scheduler mode.'
+    }
+
+    return null
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
 
@@ -369,26 +443,57 @@ export default function AdminTournamentGeneral({
       return
     }
 
-    const validDateRows = dateRows
-      .map((row, index) => ({
-        ...row,
-        label: row.label.trim() || `Date ${index + 1}`,
-        date: row.date.trim(),
-      }))
-      .filter((row) => row.date !== '')
+    // In multi-week mode the organiser sets a single start/end window; the
+    // scheduler derives actual play dates from each phase's playable weekdays,
+    // so we store only the window and skip per-day competition_dates.
+    let summary: { start_date: string | null; end_date: string | null }
+    let dateInputs: CompetitionDateInput[]
 
-    if (validDateRows.length === 0) {
-      toast.error('Add at least one tournament date.')
-      return
-    }
-
-    const seenDates = new Set<string>()
-    for (const row of validDateRows) {
-      if (seenDates.has(row.date)) {
-        toast.error('Each tournament date must be unique.')
+    if (scheduleMode === 'multi_week') {
+      const start = windowStart.trim()
+      const end = windowEnd.trim()
+      if (!start || !end) {
+        toast.error('Set both a start and end date for the competition window.')
         return
       }
-      seenDates.add(row.date)
+      if (end < start) {
+        toast.error('The end date must be on or after the start date.')
+        return
+      }
+      summary = { start_date: start, end_date: end }
+      dateInputs = []
+    } else {
+      const validDateRows = dateRows
+        .map((row, index) => ({
+          ...row,
+          label: row.label.trim() || `Date ${index + 1}`,
+          date: row.date.trim(),
+        }))
+        .filter((row) => row.date !== '')
+
+      if (validDateRows.length === 0) {
+        toast.error('Add at least one tournament date.')
+        return
+      }
+
+      const seenDates = new Set<string>()
+      for (const row of validDateRows) {
+        if (seenDates.has(row.date)) {
+          toast.error('Each tournament date must be unique.')
+          return
+        }
+        seenDates.add(row.date)
+      }
+
+      const sortedDateRows = [...validDateRows].sort((a, b) =>
+        a.date.localeCompare(b.date)
+      )
+      summary = summaryDates(sortedDateRows)
+      dateInputs = sortedDateRows.map((row, index) => ({
+        slug: row.slug || slugify(row.label) || `date-${index + 1}`,
+        label: row.label,
+        date: row.date,
+      }))
     }
 
     const validVenueRows = venueRows.filter((row) =>
@@ -408,12 +513,15 @@ export default function AdminTournamentGeneral({
       return
     }
 
-    const sortedDateRows = [...validDateRows].sort((a, b) =>
-      a.date.localeCompare(b.date)
-    )
-    const summary = summaryDates(sortedDateRows)
-
     setSaving(true)
+
+    const modeBlocker = await scheduleModeSwitchBlocker(scheduleMode)
+    if (modeBlocker) {
+      setSaving(false)
+      toast.error(modeBlocker)
+      return
+    }
+
     const { data, error } = await supabase
       .from('tournaments')
       .update({
@@ -422,6 +530,7 @@ export default function AdminTournamentGeneral({
         sport,
         sport_other: sport === 'Other' ? sportOther.trim() : null,
         default_scoring_system_id: defaultScoringSystemId || null,
+        schedule_mode: scheduleMode,
         start_date: summary.start_date,
         end_date: summary.end_date,
       })
@@ -438,14 +547,6 @@ export default function AdminTournamentGeneral({
       toast.error('Update blocked by Supabase row-level security.')
       return
     }
-
-    const dateInputs: CompetitionDateInput[] = sortedDateRows.map(
-      (row, index) => ({
-        slug: row.slug || slugify(row.label) || `date-${index + 1}`,
-        label: row.label,
-        date: row.date,
-      })
-    )
 
     const dateResult = await syncTournamentCompetitionDates(
       supabase,
@@ -545,6 +646,15 @@ export default function AdminTournamentGeneral({
                     slug.trim() !== ''
                       ? `/${slug}`
                       : 'Set details and dates first',
+                },
+                {
+                  title: 'Scheduler selected',
+                  done: true,
+                  pending: false,
+                  desc:
+                    scheduleMode === 'multi_week'
+                      ? 'Multi-week calendar'
+                      : 'Event-day court grid',
                 },
                 {
                   title: 'Organisers invited',
@@ -687,74 +797,168 @@ export default function AdminTournamentGeneral({
       </section>
 
       <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-50">
-              Tournament dates
-            </h2>
-            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-              Add every date the tournament, festival or league will run on.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={addDateRow}
-            className="shrink-0 rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-          >
-            Add date
-          </button>
-        </div>
-
-        <div className="mt-4 space-y-2">
-          {dateRows.map((row, index) => (
-            <div
-              key={row.key}
-              className="grid gap-2 rounded-md border border-zinc-200 bg-zinc-50 p-2 dark:border-zinc-800 dark:bg-zinc-900/40 sm:grid-cols-[1fr_1fr_auto]"
+        <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-50">
+          Scheduling mode
+        </h2>
+        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+          Choose one scheduling model for this tournament. Mixing modes is not available in V1.
+        </p>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {(
+            [
+              {
+                value: 'event_day',
+                title: 'Event-day scheduler',
+                desc: 'Court grid, day tabs, scorecard printing, and short tournament auto-plan.',
+              },
+              {
+                value: 'multi_week',
+                title: 'Multi-week scheduler',
+                desc: 'Calendar planning across weeks or months with playable weekdays and venue strategy.',
+              },
+            ] as { value: TournamentScheduleMode; title: string; desc: string }[]
+          ).map((option) => (
+            <label
+              key={option.value}
+              className={[
+                'cursor-pointer rounded-lg border p-4 transition-colors',
+                scheduleMode === option.value
+                  ? 'border-tm-orange bg-orange-50 dark:border-tm-orange dark:bg-orange-950/20'
+                  : 'border-zinc-200 bg-white hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-700',
+              ].join(' ')}
             >
-              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                Label
+              <span className="flex items-start gap-3">
                 <input
-                  type="text"
-                  value={row.label}
-                  onChange={(e) =>
-                    updateDateRow(row.key, { label: e.target.value })
-                  }
-                  placeholder={`Date ${index + 1}`}
-                  className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                  type="radio"
+                  name="schedule-mode"
+                  value={option.value}
+                  checked={scheduleMode === option.value}
+                  onChange={() => setScheduleMode(option.value)}
+                  className="mt-1"
                 />
-              </label>
-              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                Date
-                <input
-                  type="date"
-                  value={row.date}
-                  onChange={(e) =>
-                    updateDateRow(row.key, { date: e.target.value })
-                  }
-                  className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
-                />
-              </label>
-              <button
-                type="button"
-                onClick={() => removeDateRow(row.key)}
-                disabled={dateRows.length === 1}
-                className="self-end rounded-md border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-600 shadow-sm hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-red-900 dark:bg-zinc-900 dark:text-red-400 dark:hover:bg-red-950"
-              >
-                Remove
-              </button>
-            </div>
+                <span>
+                  <span className="block text-sm font-bold text-zinc-900 dark:text-zinc-50">
+                    {option.title}
+                  </span>
+                  <span className="mt-1 block text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+                    {option.desc}
+                  </span>
+                </span>
+              </span>
+            </label>
           ))}
         </div>
+        {scheduleMode !== (tournament.schedule_mode ?? 'event_day') && (
+          <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">
+            Scheduler mode changes are saved with General details. If fixtures or multi-week settings already exist, Tournamate will block the switch to avoid clashing schedule models.
+          </p>
+        )}
       </section>
 
       <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
         <div className="flex items-center justify-between gap-3">
           <div>
             <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-50">
-              Venues
+              {scheduleMode === 'multi_week'
+                ? 'Competition window'
+                : 'Tournament dates'}
             </h2>
             <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-              Add one or more locations where this tournament will be hosted.
+              {scheduleMode === 'multi_week'
+                ? 'Set the start and end of the season. The scheduler plans fixtures across this window using each phase’s playable weekdays.'
+                : 'Add every date the tournament, festival or league will run on.'}
+            </p>
+          </div>
+          {scheduleMode !== 'multi_week' && (
+            <button
+              type="button"
+              onClick={addDateRow}
+              className="shrink-0 rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            >
+              Add date
+            </button>
+          )}
+        </div>
+
+        {scheduleMode === 'multi_week' ? (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+              Start date
+              <input
+                type="date"
+                value={windowStart}
+                onChange={(e) => setWindowStart(e.target.value)}
+                className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+              />
+            </label>
+            <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+              End date
+              <input
+                type="date"
+                value={windowEnd}
+                min={windowStart || undefined}
+                onChange={(e) => setWindowEnd(e.target.value)}
+                className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+              />
+            </label>
+          </div>
+        ) : (
+          <div className="mt-4 space-y-2">
+            {dateRows.map((row, index) => (
+              <div
+                key={row.key}
+                className="grid gap-2 rounded-md border border-zinc-200 bg-zinc-50 p-2 dark:border-zinc-800 dark:bg-zinc-900/40 sm:grid-cols-[1fr_1fr_auto]"
+              >
+                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                  Label
+                  <input
+                    type="text"
+                    value={row.label}
+                    onChange={(e) =>
+                      updateDateRow(row.key, { label: e.target.value })
+                    }
+                    placeholder={`Date ${index + 1}`}
+                    className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                  />
+                </label>
+                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                  Date
+                  <input
+                    type="date"
+                    value={row.date}
+                    onChange={(e) =>
+                      updateDateRow(row.key, { date: e.target.value })
+                    }
+                    className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => removeDateRow(row.key)}
+                  disabled={dateRows.length === 1}
+                  className="self-end rounded-md border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-600 shadow-sm hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-red-900 dark:bg-zinc-900 dark:text-red-400 dark:hover:bg-red-950"
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-50">
+              Venues{' '}
+              {scheduleMode === 'multi_week' && (
+                <span className="font-normal text-zinc-400">(optional)</span>
+              )}
+            </h2>
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+              {scheduleMode === 'multi_week'
+                ? 'Only needed for fixtures at neutral or shared venues. Home-and-away leagues use each team’s home venue, set on the team.'
+                : 'Add one or more locations where this tournament will be hosted.'}
             </p>
           </div>
           <button
@@ -784,6 +988,21 @@ export default function AdminTournamentGeneral({
                   Remove
                 </button>
               </div>
+              <AddressAutocomplete
+                id={`venue-address-search-${venue.key}`}
+                label="Search address (optional)"
+                onSelect={(address) =>
+                  updateVenueRow(venue.key, {
+                    name:
+                      venue.name.trim() === '' && address.name ? address.name : venue.name,
+                    address_line1: address.line1 || venue.address_line1,
+                    city: address.city || venue.city,
+                    county: address.county || venue.county,
+                    postcode: address.postcode || venue.postcode,
+                    country: address.country || venue.country,
+                  })
+                }
+              />
               <div className="grid gap-3 md:grid-cols-2">
                 <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
                   Venue name

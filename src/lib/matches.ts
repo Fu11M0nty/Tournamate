@@ -4,6 +4,36 @@ import type { AgeGroup, Day, ElementSlot, Match, Phase, PhaseElement, Pool, Pool
 
 type Supabase = ReturnType<typeof createClient>
 
+/**
+ * Identify genuinely duplicated fixtures — the same matchup scheduled twice by
+ * mistake — while leaving legitimate repeats alone.
+ *
+ * A fixture's signature is orientation-aware (home vs away preserved) and scoped
+ * to its phase and round. That means a home-and-away league, where a pair meets
+ * once at each team's venue, produces two *different* signatures (the home/away
+ * sides swap) and is never flagged. Only two fixtures sharing the same phase,
+ * round and home/away orientation count as a duplicate.
+ */
+export function findDuplicateMatchIds(matches: Match[]): Set<string> {
+  const bySignature = new Map<string, string[]>()
+  for (const m of matches) {
+    const home = m.home_team_id ?? (m.home_slot_id ? `slot:${m.home_slot_id}` : 'home')
+    const away = m.away_team_id ?? (m.away_slot_id ? `slot:${m.away_slot_id}` : 'away')
+    const phase = m.phase_id ?? 'none'
+    const round = m.round_number ?? 'none'
+    const signature = `${phase}|${home}|${away}|${round}`
+    const ids = bySignature.get(signature) ?? []
+    ids.push(m.id)
+    bySignature.set(signature, ids)
+  }
+
+  const duplicates = new Set<string>()
+  for (const ids of bySignature.values()) {
+    if (ids.length > 1) ids.forEach((id) => duplicates.add(id))
+  }
+  return duplicates
+}
+
 interface TournamentDates {
   start_date: string | null
   end_date: string | null
