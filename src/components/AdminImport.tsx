@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { createClient } from '@/lib/supabase'
 import { parseCsv } from '@/lib/csv'
+import HelpPrompt from '@/components/help/HelpPrompt'
 import type { AgeGroup, Team, Tournament } from '@/lib/types'
 
 interface AdminImportProps {
@@ -303,8 +304,9 @@ export default function AdminImport({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-50">
+        <h2 className="flex items-center gap-2 text-xl font-bold text-zinc-900 dark:text-zinc-50">
           Bulk import — {tournament.name}
+          <HelpPrompt guideSlug="import-export" label="bulk import" tip="CSV templates for divisions, teams, and players" />
         </h2>
         <button
           type="button"

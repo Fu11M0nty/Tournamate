@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import type { ScoringSystem } from '@/lib/types'
 import ScoringSystemForm from '@/components/ScoringSystemForm'
+import HelpPrompt from '@/components/help/HelpPrompt'
 
 export default function AdminScoringList() {
   const [systems, setSystems] = useState<ScoringSystem[]>([])
@@ -34,7 +35,10 @@ export default function AdminScoringList() {
     <div className="mx-auto w-full max-w-5xl">
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-50">Scoring Systems</h2>
+          <h2 className="flex items-center gap-2 text-xl font-bold text-zinc-900 dark:text-zinc-50">
+            Scoring Systems
+            <HelpPrompt guideSlug="scoring" label="scoring systems" tip="Points, bonus points, forfeits, and tie-breakers" />
+          </h2>
           <p className="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">Manage points logic and tie-breakers across different sports.</p>
         </div>
         {!isFormOpen && (

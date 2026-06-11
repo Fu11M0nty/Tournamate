@@ -21,6 +21,7 @@ import {
   type MultiWeekScheduleMatch,
 } from '@/lib/multiWeekSchedule'
 import { createClient } from '@/lib/supabase'
+import HelpPrompt from '@/components/help/HelpPrompt'
 import { buildIsoFromLondonTime, formatKickoffTime, getLondonTimeHHmm } from '@/lib/time'
 import type {
   AgeGroup,
@@ -944,8 +945,9 @@ export default function AdminMultiWeekScheduleView({
     <div className="mx-auto max-w-7xl space-y-5">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">
+          <h1 className="flex items-center gap-2 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
             Multi-week schedule
+            <HelpPrompt guideSlug="multi-week-league" label="the multi-week league planner" tip="Venue hours, the calendar, auto-plan, and fine-tuning" />
           </h1>
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
             Plan league and bracket fixtures across dates, weekdays, and venue strategies.

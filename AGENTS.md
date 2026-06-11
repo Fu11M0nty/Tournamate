@@ -273,6 +273,7 @@ npm run qa:evidence      # test-by-test screenshot/video evidence index
 npm run qa:release       # typecheck + unit + qa:db + qa:e2e
 npm run qa               # alias for qa:release
 npm run qa:reset         # cleanup then seed
+npm run docs:screenshots # regenerate admin Help screenshots (needs QA seed + running app)
 ```
 
 QA seed/cleanup needs `SUPABASE_SERVICE_ROLE_KEY`; remote projects are blocked unless `QA_ALLOW_REMOTE=1` and the tournament slug starts with `qa-`.
@@ -322,6 +323,7 @@ A task is complete when:
 4. Scoring/standings respect the configured `scoring_system` (not a hard-coded scheme).
 5. The test impact has been considered and stated: unit, DB, public E2E, admin E2E, QA seed, and docs are updated where relevant.
 6. `npm run typecheck` and `npm run lint` pass; relevant tests pass. Mobile changes also pass the mobile typecheck.
+7. **Help-doc impact has been considered and stated**: if the change alters an admin workflow, its labels, or its screens, update the matching guide in `src/lib/helpContent.ts` (and the contextual `HelpPrompt` targets), and refresh affected screenshots with `npm run docs:screenshots`. Say explicitly in the summary whether help docs/screenshots needed updating.
 
 ### Test impact rule
 
@@ -332,6 +334,7 @@ For every code or schema change, decide whether tests need adding or amending:
 - Public spectator behaviour: update public Playwright checks and run `npm run qa:public` or `npm run qa:e2e`.
 - Admin organiser behaviour: update safe admin Playwright checks and run `npm run qa:admin` or `npm run qa:e2e`.
 - Format, fixture, schedule, bracket, scoring, or progression changes: consider unit, DB, public E2E, admin E2E, and QA seed data together.
+- Admin UI/workflow changes: check whether an admin Help guide (`src/lib/helpContent.ts`) or its Playwright-generated screenshots (`npm run docs:screenshots` → `public/help/screenshots/`) describe the changed screen, and update them so the docs never drift from the product.
 
 If a change does not include test changes, note why in the final implementation summary. If automation is deferred, add it to `docs/qa-test-catalogue.md` as a future roadmap item.
 

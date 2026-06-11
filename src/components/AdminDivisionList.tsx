@@ -4,6 +4,7 @@ import { useState } from 'react'
 import toast from 'react-hot-toast'
 import DivisionEditForm from './DivisionEditForm'
 import AdminStructureView from './AdminStructureView'
+import HelpPrompt from './help/HelpPrompt'
 import { createClient } from '@/lib/supabase'
 import { describeMatchRules } from '@/lib/matchRules'
 import { labelForLegacyDay } from '@/lib/competitionDates'
@@ -66,8 +67,9 @@ export default function AdminDivisionList({
               </svg>
               Back to Divisions
             </button>
-            <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-50">
+            <h2 className="flex items-center gap-2 text-xl font-bold text-zinc-900 dark:text-zinc-50">
               {currentFormatDivision.name} format
+              <HelpPrompt guideSlug="choose-format" label="choosing a format" tip="How the format templates and progression work" />
             </h2>
             <p className="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">
               Choose how teams compete, qualify, and create fixtures for this division.
@@ -142,8 +144,9 @@ export default function AdminDivisionList({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-50">
+        <h2 className="flex items-center gap-2 text-xl font-bold text-zinc-900 dark:text-zinc-50">
           Divisions — {tournament.name}
+          <HelpPrompt guideSlug="divisions" label="divisions" tip="What divisions are and how to set them up" />
         </h2>
         <div className="flex items-center gap-2">
           <button

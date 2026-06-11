@@ -10,6 +10,7 @@ import {
   type FormatBuilderOptions,
 } from '@/lib/formatBuilders'
 import { generateStructureFixtures } from '@/lib/matches'
+import HelpPrompt from './help/HelpPrompt'
 import Step1TemplatePicker from './wizard/Step1TemplatePicker'
 import Step2Configure from './wizard/Step2Configure'
 import Step3Teams from './wizard/Step3Teams'
@@ -264,6 +265,9 @@ export default function StructureWizard({
             </div>
           )
         })}
+        <span className="ml-1">
+          <HelpPrompt guideSlug="choose-format" label="the format wizard" tip="What each wizard step does" />
+        </span>
       </nav>
 
       {/* Step content */}
