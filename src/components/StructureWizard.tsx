@@ -6,6 +6,7 @@ import {
   FORMAT_BUILDERS,
   defaultFormatBuilderOptions,
   applyFormatBuilder,
+  resolvePlaceholderTeamCount,
   type FormatBuilderOptions,
 } from '@/lib/formatBuilders'
 import { generateStructureFixtures } from '@/lib/matches'
@@ -167,11 +168,31 @@ export default function StructureWizard({
         resolvedByeTeamIds = state.byeSelections
       }
 
+      // In placeholder mode the organiser may leave the team count at its
+      // default (never firing SET_TEAM_COUNT), so expectedTeamCount can still be
+      // null. Resolve it from the current options so placeholder teams — and
+      // therefore fixtures — are always generated.
+      const optionsForApply: FormatBuilderOptions = {
+        ...state.options,
+        byeTeamIds: resolvedByeTeamIds,
+      }
+      if (
+        state.usePlaceholders &&
+        existingTeams.length === 0 &&
+        optionsForApply.expectedTeamCount == null &&
+        selectedBuilder
+      ) {
+        optionsForApply.expectedTeamCount = resolvePlaceholderTeamCount(
+          selectedBuilder,
+          state.options
+        )
+      }
+
       const result = await applyFormatBuilder(
         supabase as Parameters<typeof applyFormatBuilder>[0],
         division,
         state.builderId,
-        { ...state.options, byeTeamIds: resolvedByeTeamIds }
+        optionsForApply
       )
 
       if (result.error) {

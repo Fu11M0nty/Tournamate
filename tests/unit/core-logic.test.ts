@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   defaultFormatBuilderOptions,
   formatBuilderById,
+  resolvePlaceholderTeamCount,
   resolveFormatBuilder,
 } from '@/lib/formatBuilders'
 import { matchStageLabel, matchStageRoundLabel } from '@/lib/matchLabel'
@@ -498,5 +499,33 @@ describe('structure validation', () => {
       ok: false,
       status: 'info',
     })
+  })
+})
+
+describe('resolvePlaceholderTeamCount', () => {
+  const twoPools = formatBuilderById('two-pools')!
+  const roundRobin = formatBuilderById('simple-round-robin')!
+
+  it('prefers an explicit expectedTeamCount', () => {
+    expect(resolvePlaceholderTeamCount(twoPools, { expectedTeamCount: 12 })).toBe(12)
+  })
+
+  it('falls back to teamCount when expectedTeamCount is null', () => {
+    expect(
+      resolvePlaceholderTeamCount(twoPools, { expectedTeamCount: null, teamCount: 16 })
+    ).toBe(16)
+  })
+
+  it('uses the pool-derived count for pool templates', () => {
+    expect(resolvePlaceholderTeamCount(twoPools, { poolCount: 2, teamsPerPool: 6 })).toBe(12)
+  })
+
+  it('falls back to 8 for a template with no count configuration', () => {
+    expect(resolvePlaceholderTeamCount(roundRobin, {})).toBe(8)
+  })
+
+  it('clamps to the valid 2–512 range', () => {
+    expect(resolvePlaceholderTeamCount(roundRobin, { expectedTeamCount: 1 })).toBe(2)
+    expect(resolvePlaceholderTeamCount(roundRobin, { expectedTeamCount: 9999 })).toBe(512)
   })
 })
