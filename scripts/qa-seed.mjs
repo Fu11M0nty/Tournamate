@@ -76,6 +76,15 @@ const tournament = await must(
       venue_postcode: 'MK1 1QA',
       description: 'Automated QA seed data. Safe to delete.',
       is_public: true,
+      organiser_contact_name: 'QA Organiser',
+      organiser_contact_email: 'qa-organiser@example.com',
+      organiser_contact_phone: '07700 900123',
+      arrival_instructions: 'Arrive 30 minutes before your first match and check in at the QA desk.',
+      parking_notes: 'Free parking in the QA Arena overflow car park.',
+      venue_notes: 'Courts are indoors; non-marking shoes required.',
+      facilities_notes: 'Cafe open from 9am. Toilets beside the main entrance.',
+      emergency_contact: 'First aid at the main desk — 07700 900456',
+      public_notice: 'QA notice: schedule may change — check back on the day.',
       created_by: admin.id,
     })
     .select('id, slug')

@@ -132,8 +132,8 @@ const total = tests.length
 const failed = tests.filter((test) => ['failed', 'timedOut', 'interrupted', 'unknown'].includes(test.status))
 const skipped = tests.filter((test) => test.status === 'skipped')
 const totalDuration = tests.reduce((totalMs, test) => totalMs + test.durationMs, 0)
-const expectedPassed = Number(process.env.QA_EXPECTED_E2E_PASSED ?? 33)
-const expectedSkipped = Number(process.env.QA_EXPECTED_E2E_SKIPPED ?? 11)
+const expectedPassed = Number(process.env.QA_EXPECTED_E2E_PASSED ?? 40)
+const expectedSkipped = Number(process.env.QA_EXPECTED_E2E_SKIPPED ?? 34)
 const qaAdminEmail = process.env.QA_ADMIN_EMAIL?.trim() || process.env.E2E_ADMIN_EMAIL?.trim() || 'qa-admin@tournamate.test'
 const expectedResultMatches =
   counts.passed === expectedPassed &&

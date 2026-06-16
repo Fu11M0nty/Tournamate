@@ -43,9 +43,24 @@ create table tournaments (
   venue_postcode text,
   description   text,
   is_public     boolean not null default true,
+  organiser_contact_name  text,
+  organiser_contact_email text,
+  organiser_contact_phone text,
+  venue_notes             text,
+  parking_notes           text,
+  arrival_instructions    text,
+  facilities_notes        text,
+  emergency_contact       text,
+  public_notice           text,
+  logo_url                text,
+  brand_primary_color     text,
+  sponsor_name            text,
+  sponsor_logo_url        text,
+  sponsor_url             text,
   created_at    timestamptz not null default now(),
   check (status in ('upcoming', 'live', 'complete')),
-  check (schedule_mode in ('event_day', 'multi_week'))
+  check (schedule_mode in ('event_day', 'multi_week')),
+  check (brand_primary_color is null or brand_primary_color ~ '^#[0-9A-Fa-f]{6}$')
 );
 
 -- ---------------------------------------------------------------------------

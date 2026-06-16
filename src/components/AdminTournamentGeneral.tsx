@@ -4,6 +4,12 @@ import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import AddressAutocomplete from '@/components/AddressAutocomplete'
 import HelpPrompt from '@/components/help/HelpPrompt'
+import TournamentBrandingImageField from '@/components/TournamentBrandingImageField'
+import {
+  DEFAULT_BRAND_PRIMARY_COLOR,
+  normalizeBrandPrimaryColor,
+  normalizePublicUrl,
+} from '@/lib/branding'
 import {
   type CompetitionDateInput,
   syncTournamentCompetitionDates,
@@ -43,6 +49,14 @@ interface VenueRow {
   postcode: string
   country: string
   notes: string
+}
+
+interface BrandingState {
+  logo_url: string
+  brand_primary_color: string
+  sponsor_name: string
+  sponsor_logo_url: string
+  sponsor_url: string
 }
 
 function formatDateLabel(date: string): string {
@@ -139,6 +153,24 @@ export default function AdminTournamentGeneral({
   const [scheduleMode, setScheduleMode] = useState<TournamentScheduleMode>(
     tournament.schedule_mode ?? 'event_day'
   )
+  const [publicInfo, setPublicInfo] = useState({
+    organiser_contact_name: tournament.organiser_contact_name ?? '',
+    organiser_contact_email: tournament.organiser_contact_email ?? '',
+    organiser_contact_phone: tournament.organiser_contact_phone ?? '',
+    arrival_instructions: tournament.arrival_instructions ?? '',
+    parking_notes: tournament.parking_notes ?? '',
+    venue_notes: tournament.venue_notes ?? '',
+    facilities_notes: tournament.facilities_notes ?? '',
+    emergency_contact: tournament.emergency_contact ?? '',
+    public_notice: tournament.public_notice ?? '',
+  })
+  const [branding, setBranding] = useState<BrandingState>({
+    logo_url: tournament.logo_url ?? '',
+    brand_primary_color: tournament.brand_primary_color ?? '',
+    sponsor_name: tournament.sponsor_name ?? '',
+    sponsor_logo_url: tournament.sponsor_logo_url ?? '',
+    sponsor_url: tournament.sponsor_url ?? '',
+  })
   const [scoringSystems, setScoringSystems] = useState<ScoringSystem[]>([])
   const [dateRows, setDateRows] = useState<DateRow[]>(() =>
     initialDateRows(tournament)
@@ -262,6 +294,14 @@ export default function AdminTournamentGeneral({
     setVenueRows((rows) =>
       rows.map((row) => (row.key === key ? { ...row, ...patch } : row))
     )
+  }
+
+  function updatePublicInfo(field: keyof typeof publicInfo, value: string) {
+    setPublicInfo((info) => ({ ...info, [field]: value }))
+  }
+
+  function updateBranding(field: keyof BrandingState, value: string) {
+    setBranding((current) => ({ ...current, [field]: value }))
   }
 
   function addDateRow() {
@@ -443,6 +483,32 @@ export default function AdminTournamentGeneral({
       toast.error('Enter the sport name when selecting Other.')
       return
     }
+    const brandColorInput = branding.brand_primary_color.trim()
+    const normalizedBrandPrimaryColor = brandColorInput
+      ? normalizeBrandPrimaryColor(brandColorInput)
+      : null
+    if (brandColorInput && !normalizedBrandPrimaryColor) {
+      toast.error('Brand colour must be a six-digit hex value, for example #f47c20.')
+      return
+    }
+
+    const normalizedLogoUrl = normalizePublicUrl(branding.logo_url)
+    if (branding.logo_url.trim() && !normalizedLogoUrl) {
+      toast.error('Tournament logo URL must start with http:// or https://.')
+      return
+    }
+
+    const normalizedSponsorLogoUrl = normalizePublicUrl(branding.sponsor_logo_url)
+    if (branding.sponsor_logo_url.trim() && !normalizedSponsorLogoUrl) {
+      toast.error('Sponsor logo URL must start with http:// or https://.')
+      return
+    }
+
+    const normalizedSponsorUrl = normalizePublicUrl(branding.sponsor_url)
+    if (branding.sponsor_url.trim() && !normalizedSponsorUrl) {
+      toast.error('Sponsor website URL must start with http:// or https://.')
+      return
+    }
 
     // In multi-week mode the organiser sets a single start/end window; the
     // scheduler derives actual play dates from each phase's playable weekdays,
@@ -534,6 +600,20 @@ export default function AdminTournamentGeneral({
         schedule_mode: scheduleMode,
         start_date: summary.start_date,
         end_date: summary.end_date,
+        organiser_contact_name: cleanText(publicInfo.organiser_contact_name),
+        organiser_contact_email: cleanText(publicInfo.organiser_contact_email),
+        organiser_contact_phone: cleanText(publicInfo.organiser_contact_phone),
+        arrival_instructions: cleanText(publicInfo.arrival_instructions),
+        parking_notes: cleanText(publicInfo.parking_notes),
+        venue_notes: cleanText(publicInfo.venue_notes),
+        facilities_notes: cleanText(publicInfo.facilities_notes),
+        emergency_contact: cleanText(publicInfo.emergency_contact),
+        public_notice: cleanText(publicInfo.public_notice),
+        logo_url: normalizedLogoUrl,
+        brand_primary_color: normalizedBrandPrimaryColor,
+        sponsor_name: cleanText(branding.sponsor_name),
+        sponsor_logo_url: normalizedSponsorLogoUrl,
+        sponsor_url: normalizedSponsorUrl,
       })
       .eq('id', tournament.id)
       .select()
@@ -581,6 +661,10 @@ export default function AdminTournamentGeneral({
     toast.success('General details saved')
     onTournamentChanged()
   }
+
+  const brandColorPreview =
+    normalizeBrandPrimaryColor(branding.brand_primary_color) ??
+    DEFAULT_BRAND_PRIMARY_COLOR
 
   return (
     <form onSubmit={handleSubmit} className="mx-auto max-w-5xl space-y-5">
@@ -795,6 +879,92 @@ export default function AdminTournamentGeneral({
               </select>
             </label>
           )}
+        </div>
+      </section>
+
+      <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+        <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-50">
+          Branding
+        </h2>
+        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+          Optional club or tournament branding for public pages and printable scorecards.
+        </p>
+
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <TournamentBrandingImageField
+            tournamentId={tournament.id}
+            kind="logo"
+            label="Tournament logo"
+            description="Shown in the public page hero and scorecard headers. Use a transparent PNG or SVG-style image where possible."
+            value={branding.logo_url}
+            onChange={(value) => updateBranding('logo_url', value)}
+          />
+          <TournamentBrandingImageField
+            tournamentId={tournament.id}
+            kind="sponsor"
+            label="Sponsor logo"
+            description="Optional partner mark shown with the sponsor name. Keep it compact so match information stays clear."
+            value={branding.sponsor_logo_url}
+            onChange={(value) => updateBranding('sponsor_logo_url', value)}
+          />
+        </div>
+
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div className="space-y-3">
+            <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300">
+              Primary brand colour
+              <div className="mt-1 grid grid-cols-[3rem_1fr_auto] gap-2">
+                <input
+                  type="color"
+                  value={brandColorPreview}
+                  onChange={(e) => updateBranding('brand_primary_color', e.target.value)}
+                  aria-label="Pick primary brand colour"
+                  className="h-10 w-12 rounded-md border border-zinc-300 bg-white p-1 shadow-sm dark:border-zinc-700 dark:bg-zinc-900"
+                />
+                <input
+                  type="text"
+                  value={branding.brand_primary_color}
+                  onChange={(e) => updateBranding('brand_primary_color', e.target.value)}
+                  placeholder="#f47c20"
+                  className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                />
+                {branding.brand_primary_color && (
+                  <button
+                    type="button"
+                    onClick={() => updateBranding('brand_primary_color', '')}
+                    className="rounded-md px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            </label>
+            <p className="text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+              Used as a restrained accent. Leave blank to use the default TournaMate orange.
+            </p>
+          </div>
+
+          <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+            Sponsor name
+            <input
+              type="text"
+              value={branding.sponsor_name}
+              onChange={(e) => updateBranding('sponsor_name', e.target.value)}
+              placeholder="Optional partner name"
+              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+            />
+          </label>
+
+          <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300 md:col-span-2">
+            Sponsor website
+            <input
+              type="url"
+              value={branding.sponsor_url}
+              onChange={(e) => updateBranding('sponsor_url', e.target.value)}
+              placeholder="https://..."
+              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+            />
+          </label>
         </div>
       </section>
 
@@ -1104,6 +1274,107 @@ export default function AdminTournamentGeneral({
               </div>
             </div>
           ))}
+        </div>
+      </section>
+
+      <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+        <h2 className="flex items-center gap-2 text-base font-bold text-zinc-900 dark:text-zinc-50">
+          Public event information
+          <HelpPrompt guideSlug="public-pages" label="public event information" tip="What spectators see on the public Info tab" />
+        </h2>
+        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+          Everything here is shown publicly on the tournament page. Empty fields are hidden, so fill in only what you need.
+        </p>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+            Organiser contact name
+            <input
+              type="text"
+              value={publicInfo.organiser_contact_name}
+              onChange={(e) => updatePublicInfo('organiser_contact_name', e.target.value)}
+              placeholder="Who should spectators and teams ask for?"
+              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+            />
+          </label>
+          <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+            Emergency / first-aid contact
+            <input
+              type="text"
+              value={publicInfo.emergency_contact}
+              onChange={(e) => updatePublicInfo('emergency_contact', e.target.value)}
+              placeholder="e.g. First aid at the main desk — 07xxx xxxxxx"
+              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+            />
+          </label>
+          <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+            Organiser contact email
+            <input
+              type="email"
+              value={publicInfo.organiser_contact_email}
+              onChange={(e) => updatePublicInfo('organiser_contact_email', e.target.value)}
+              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+            />
+          </label>
+          <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+            Organiser contact phone
+            <input
+              type="tel"
+              value={publicInfo.organiser_contact_phone}
+              onChange={(e) => updatePublicInfo('organiser_contact_phone', e.target.value)}
+              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+            />
+          </label>
+          <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+            Getting there &amp; arrival instructions
+            <textarea
+              value={publicInfo.arrival_instructions}
+              onChange={(e) => updatePublicInfo('arrival_instructions', e.target.value)}
+              rows={3}
+              placeholder="When to arrive, where to check in, which entrance to use…"
+              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+            />
+          </label>
+          <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+            Parking notes
+            <textarea
+              value={publicInfo.parking_notes}
+              onChange={(e) => updatePublicInfo('parking_notes', e.target.value)}
+              rows={3}
+              placeholder="Where to park, costs, overflow parking, drop-off points…"
+              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+            />
+          </label>
+          <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+            Venue notes
+            <textarea
+              value={publicInfo.venue_notes}
+              onChange={(e) => updatePublicInfo('venue_notes', e.target.value)}
+              rows={3}
+              placeholder="Anything visitors should know about the venue itself…"
+              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+            />
+          </label>
+          <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+            Facilities
+            <textarea
+              value={publicInfo.facilities_notes}
+              onChange={(e) => updatePublicInfo('facilities_notes', e.target.value)}
+              rows={3}
+              placeholder="Food and drink, toilets, changing rooms, spectator seating…"
+              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+            />
+          </label>
+          <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300 md:col-span-2">
+            Public notice
+            <textarea
+              value={publicInfo.public_notice}
+              onChange={(e) => updatePublicInfo('public_notice', e.target.value)}
+              rows={2}
+              placeholder="Shown as a banner across the whole public tournament page — use it for last-minute announcements."
+              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+            />
+          </label>
         </div>
       </section>
 
