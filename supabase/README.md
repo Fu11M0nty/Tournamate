@@ -98,12 +98,14 @@ Create these buckets manually in Supabase Studio:
 ```text
 scoresheets  public
 team-logos   public
+tournament-branding public
 ```
 
 Then run:
 
 ```text
 scoresheets_storage_policies.sql
+tournament_branding_storage_policies.sql
 ```
 
 There is currently no SQL policy file for `team-logos`; keep its bucket public if using logo uploads.
@@ -148,6 +150,7 @@ add_phase_elements.sql
 add_placeholder_matches.sql
 add_tournamate_fields.sql
 add_tournament_general.sql
+add_tournament_branding.sql
 add_organiser_onboarding.sql
 backup_matches.sql
 backup_matches_rpc.sql
@@ -158,6 +161,7 @@ Then create the storage buckets and run:
 
 ```text
 scoresheets_storage_policies.sql
+tournament_branding_storage_policies.sql
 ```
 
 ## Create the First Superadmin

@@ -21,10 +21,10 @@ Use this template for a pre-production or release-candidate QA sign-off.
 | --- | --- | --- | --- | --- |
 | TypeScript | `npm run typecheck` | Pass |  |  |
 | Unit tests | `npm run test:unit` | Pass |  |  |
-| DB integration | `npm run qa:db` | 11 pass |  |  |
-| Public browser smoke | `npm run qa:public` | 18 pass, 0 skip |  |  |
+| DB integration | `npm run qa:db` | 13 pass |  |  |
+| Public browser smoke | `npm run qa:public` | 20 pass, 0 skip |  |  |
 | Admin browser smoke | `npm run qa:admin` | 20 pass, 14 skip |  |  |
-| Browser smoke | `npm run qa:e2e` | 38 pass, 14 skip |  |  |
+| Browser smoke | `npm run qa:e2e` | 40 pass, 34 skip |  |  |
 | Release gate | `npm run qa:release` | Pass |  |  |
 
 Evidence report:

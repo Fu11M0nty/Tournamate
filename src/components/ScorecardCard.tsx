@@ -1,6 +1,7 @@
 'use client'
 
 import { QRCodeSVG } from 'qrcode.react'
+import type { TournamentBranding } from '@/lib/branding'
 import type { AgeGroup, Match, Team } from '@/lib/types'
 
 interface Props {
@@ -10,6 +11,8 @@ interface Props {
   ageGroup: AgeGroup
   copy: 'home' | 'away'
   captureUrl: string
+  tournamentName: string
+  branding: TournamentBranding
 }
 
 // For continuous, one unlabelled period still renders the CP checkbox
@@ -135,6 +138,8 @@ export default function ScorecardCard({
   ageGroup,
   copy,
   captureUrl,
+  tournamentName,
+  branding,
 }: Props) {
   const raw = ageGroup.period_minutes * 3
   const goalCount = Math.ceil(raw / 5) * 5
@@ -178,6 +183,38 @@ export default function ScorecardCard({
         }}
       >
         <div style={{ flex: 1, padding: '5pt 6pt', minWidth: 0 }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '5pt',
+              marginBottom: '3pt',
+              minHeight: '14pt',
+            }}
+          >
+            {branding.logoUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={branding.logoUrl}
+                alt=""
+                style={{ height: '14pt', width: 'auto', objectFit: 'contain' }}
+              />
+            )}
+            <span
+              style={{
+                color: branding.primaryColor,
+                fontSize: '7.5pt',
+                fontWeight: 700,
+                letterSpacing: '0.08em',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                textTransform: 'uppercase',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {tournamentName}
+            </span>
+          </div>
           <div
             style={{
               fontWeight: 700,
@@ -225,7 +262,7 @@ export default function ScorecardCard({
             flexShrink: 0,
           }}
         >
-          <QRCodeSVG value={shortId} size={72} level="M" />
+          <QRCodeSVG value={captureUrl} size={72} level="M" />
           <span
             style={{ fontFamily: 'monospace', fontSize: '7pt', color: '#555' }}
           >
@@ -422,6 +459,36 @@ export default function ScorecardCard({
           />
         </div>
       </div>
+      {branding.hasSponsor && (
+        <div
+          style={{
+            borderTop: '0.5pt solid #d1d5db',
+            color: '#4b5563',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '4pt',
+            fontSize: '7pt',
+            padding: '2pt 5pt',
+            flexShrink: 0,
+          }}
+        >
+          <span style={{ color: branding.primaryColor, fontWeight: 700 }}>
+            Supported by
+          </span>
+          {branding.sponsorLogoUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={branding.sponsorLogoUrl}
+              alt=""
+              style={{ height: '10pt', width: 'auto', objectFit: 'contain' }}
+            />
+          )}
+          {branding.sponsorName && (
+            <span style={{ fontWeight: 700 }}>{branding.sponsorName}</span>
+          )}
+        </div>
+      )}
     </div>
   )
 }

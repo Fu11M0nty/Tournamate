@@ -17,9 +17,9 @@ test.describe('QA admin help centre', () => {
     await expect(page.getByText('Getting started', { exact: true })).toBeVisible()
     await expect(page.getByText('Scheduling', { exact: true })).toBeVisible()
 
-    // Open the multi-week league guide and check its content renders.
-    await page.getByRole('button', { name: /Running a multi-week league/ }).click()
-    await expect(page.getByRole('heading', { name: 'Running a multi-week league' })).toBeVisible()
+    // Open the multi-week schedule guide and check its content renders.
+    await page.getByRole('button', { name: /Running a multi-week schedule/ }).click()
+    await expect(page.getByRole('heading', { name: 'Running a multi-week schedule' })).toBeVisible()
     await expect(page.getByText('Venue availability, courts, and playable days')).toBeVisible()
 
     // Print control and video placeholder are present.
@@ -35,10 +35,10 @@ test.describe('QA admin help centre', () => {
     const search = page.getByRole('searchbox', { name: 'Search help guides' })
     await search.fill('snapshot')
     await expect(page.getByRole('button', { name: /Snapshots and backups/ })).toBeVisible()
-    await expect(page.getByRole('button', { name: /Running a multi-week league/ })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /Running a multi-week schedule/ })).toHaveCount(0)
 
     await search.fill('')
-    await expect(page.getByRole('button', { name: /Running a multi-week league/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Running a multi-week schedule/ })).toBeVisible()
   })
 
   test('contextual help prompts deep-link to the relevant guide', async ({ page }, testInfo) => {

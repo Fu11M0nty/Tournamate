@@ -116,6 +116,9 @@ export async function resetQaTournamentGeneral() {
       sport: 'Netball',
       sport_other: null,
       default_scoring_system_id: scoringSystemId,
+      // Keep public event info aligned with the QA seed so public smoke
+      // assertions stay valid after admin workflow tests run.
+      parking_notes: 'Free parking in the QA Arena overflow car park.',
     })
     .eq('id', tournamentId)
 

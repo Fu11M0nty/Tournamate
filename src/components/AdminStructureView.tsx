@@ -220,7 +220,7 @@ export default function AdminStructureView({
   }
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-4">
+    <div className={embedded ? 'w-full space-y-4' : 'mx-auto w-full max-w-[1600px] space-y-4'}>
       {!embedded && (
         <div>
           <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-50">Tournament format</h2>

@@ -54,6 +54,22 @@ export interface Tournament {
   venue_postcode?: string | null
   description?: string | null
   is_public?: boolean
+  // Public event info — added by add_public_event_info.sql migration
+  organiser_contact_name?: string | null
+  organiser_contact_email?: string | null
+  organiser_contact_phone?: string | null
+  venue_notes?: string | null
+  parking_notes?: string | null
+  arrival_instructions?: string | null
+  facilities_notes?: string | null
+  emergency_contact?: string | null
+  public_notice?: string | null
+  // Tournament branding — added by add_tournament_branding.sql migration
+  logo_url?: string | null
+  brand_primary_color?: string | null
+  sponsor_name?: string | null
+  sponsor_logo_url?: string | null
+  sponsor_url?: string | null
 }
 
 export interface TournamentVenue {
