@@ -24,6 +24,36 @@ test.describe('QA public tournament smoke', () => {
     await expect(page.getByText('TBD', { exact: true }).first()).toBeVisible()
   })
 
+  test('shows seeded public event info and the notice banner across tabs', async ({ page }) => {
+    await page.goto(`/${QA_SLUG}`)
+
+    // The public notice renders as a banner above the tabs.
+    await expect(page.getByTestId('public-notice-banner')).toContainText('QA notice')
+
+    // Populated info sections from the seed appear on the Info tab.
+    await expect(page.getByRole('heading', { name: 'Getting there & arrival' })).toBeVisible()
+    await expect(page.getByText('Arrive 30 minutes before your first match')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Parking', exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Facilities', exact: true })).toBeVisible()
+
+    // Contact card renders tappable email and phone links.
+    const contact = page.getByTestId('public-contact-card')
+    await expect(contact.getByText('QA Organiser')).toBeVisible()
+    await expect(contact.getByRole('link', { name: 'qa-organiser@example.com' })).toHaveAttribute(
+      'href',
+      'mailto:qa-organiser@example.com'
+    )
+    await expect(contact.getByRole('link', { name: '07700 900123' })).toHaveAttribute(
+      'href',
+      'tel:07700900123'
+    )
+    await expect(contact.getByText('First aid at the main desk')).toBeVisible()
+
+    // The banner follows spectators to other tabs, not just Info.
+    await page.goto(`/${QA_SLUG}?tab=standings`)
+    await expect(page.getByTestId('public-notice-banner')).toBeVisible()
+  })
+
   test('renders public division standings, results and fixtures', async ({ page }) => {
     await page.goto(`/${QA_SLUG}/saturday/qa-under-10`)
 

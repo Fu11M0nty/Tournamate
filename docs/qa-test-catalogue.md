@@ -8,10 +8,10 @@ For run commands, environment setup, and evidence locations, use `docs/qa-runboo
 
 | Layer | Command | Test count | Main purpose |
 | --- | --- | ---: | --- |
-| Unit logic | `npm run test:unit` | 88 | Checks pure calculation and mapping logic without Supabase or a browser. |
-| Database integration | `npm run qa:db` | 11 | Seeds real QA data, checks Supabase/RLS behaviour, then cleans up. |
-| Browser E2E | `npm run qa:e2e` | 52 | Seeds QA data, runs public/admin browser workflows, captures screenshots/videos, then cleans up. |
-| Public browser E2E | `npm run qa:public` | 18 | Runs spectator-facing public page checks only. |
+| Unit logic | `npm run test:unit` | 106 | Checks pure calculation and mapping logic without Supabase or a browser. |
+| Database integration | `npm run qa:db` | 13 | Seeds real QA data, checks Supabase/RLS behaviour, then cleans up. |
+| Browser E2E | `npm run qa:e2e` | 74 | Seeds QA data, runs public/admin browser workflows and the pilot runbook dry-run, captures screenshots/videos, then cleans up. |
+| Public browser E2E | `npm run qa:public` | 20 | Runs spectator-facing public page checks only. |
 | Admin browser E2E | `npm run qa:admin` | 34 | Runs admin/security browser checks only. |
 | Docs screenshots | `npm run docs:screenshots` | 10 (asset run) | Regenerates the admin Help guide screenshots in `public/help/screenshots/` from seeded QA data. Separate Playwright config; never part of the QA gates. |
 | Browser evidence index | `npm run qa:evidence` | Report only | Regenerates the test-by-test screenshot/video/trace index from the latest Playwright JSON results. |
@@ -20,19 +20,21 @@ For run commands, environment setup, and evidence locations, use `docs/qa-runboo
 Expected browser result:
 
 ```text
-38 passed
-14 skipped
+40 passed
+34 skipped
 ```
 
-The 14 skipped tests are desktop-only admin workflow checks skipped on the mobile browser project. They are expected skips, not failures.
+The 34 skipped tests are expected skips, not failures: 14 desktop-only admin workflow checks skipped on the mobile browser project, plus all 20 instances of the opt-in pilot dry-run suite (see below).
 
 Suite-specific browser commands:
 
 ```text
-npm run qa:public  -> 18 passed, 0 skipped
+npm run qa:public  -> 20 passed, 0 skipped
 npm run qa:admin   -> 20 passed, 14 skipped
-npm run qa:e2e     -> 38 passed, 14 skipped
+npm run qa:e2e     -> 40 passed, 34 skipped
 ```
+
+Note: the pilot runbook dry-run suite (`tests/e2e/qa-pilot-dryrun.spec.ts`, "Pilot runbook dry-run") is opt-in — it skips unless `PILOT_DRYRUN=1` is set (see `docs/pilot/pilot-runbook.md` §9), and its describe name matches neither the `QA public` nor `QA admin` grep. With it enabled, a full desktop pass adds 10 more passed tests.
 
 ## QA Seed Data
 
@@ -95,6 +97,8 @@ These tests live in `tests/unit/`. They do not connect to Supabase and are the f
 | UNIT-021 | Date mapping | Legacy days map to configured date slugs. | Old URLs and new date model stay compatible. |
 | UNIT-022 | Match duration | Total match minutes are calculated for supported formats. | Scheduling needs correct match lengths. |
 | UNIT-023 | Match rule text | Continuous match rules are described in organiser language. | Admin UI explanations should match stored match settings. |
+| UNIT-024 | Public event info helpers | Populated info sections, contact rows with mailto/tel links, and the public notice are derived from tournament fields; blanks are filtered out. | The public Info tab and notice banner must hide empty fields and render tappable contacts. |
+| UNIT-025 | Tournament branding helpers | Brand colours normalise to six-digit hex, public URLs are validated as http(s), and `buildTournamentBranding` falls back safely on invalid stored values. | Public pages and scorecards must never render unsafe or malformed branding. |
 
 ## Database Integration Tests
 
@@ -113,6 +117,8 @@ These tests live in `tests/db/qa-seed.integration.test.ts` and run through `npm 
 | DB-009 | Soft-deleted team filtering | Active-data queries exclude soft-deleted teams. | A seeded soft-deleted team is visible to privileged cleanup but absent from active team queries. |
 | DB-010 | Fixture division scoping | Seeded fixtures do not reference teams from another division. | Every home/away team attached to a QA match belongs to the same division as that match. |
 | DB-011 | Progression rule integrity | Qualification rules, slots, elements, phases, pools, and source matches still line up. | Every QA progression rule targets an existing slot in the expected element/phase and references valid source structures. |
+| DB-012 | Multi-week scheduler admin writes | Authenticated admin RLS permits managing team home venues and league schedule settings. | QA admin can insert, update, and delete team venue fields and `league_schedule_settings` rows for the workflow phase. |
+| DB-013 | Public event info fields | The seed populates the tournament public event info columns and anonymous spectators can read them. | Organiser contact, arrival, parking, venue, facilities, emergency, and public notice fields are non-empty under the anon client. |
 
 ## Browser E2E Tests
 
@@ -131,6 +137,7 @@ These tests live in `tests/e2e/` and run through `npm run qa:e2e`. The suite run
 | E2E-PUB-007 | Public team list filtering | Desktop + mobile | Opens the teams tab and searches for `Amber`. | Matching teams remain visible and unrelated teams are filtered out. |
 | E2E-PUB-008 | Public schedule filtering | Desktop + mobile | Opens the schedule tab and switches from upcoming fixtures to played results. | Upcoming fixtures appear first; played results then show completed seeded teams and hide unrelated upcoming workflow fixtures. |
 | E2E-PUB-009 | Friendly public not-found pages | Desktop + mobile | Opens invalid tournament and division URLs. | Friendly not-found messages render with a Back to home link, not a hard error page. |
+| E2E-PUB-010 | Public event info and notice banner | Desktop + mobile | Opens the QA hub Info tab, checks seeded event info, then switches to Standings. | Notice banner shows on every tab; arrival/parking/facilities cards render; contact card has tappable mailto and tel links. |
 
 ### Admin Access Smoke
 
@@ -156,7 +163,7 @@ These tests use the `QA Workflow Division` or temporary records and clean up aft
 | E2E-SAFE-003 | Open workflow format view | Desktop only; skipped on mobile | No data mutation. | None required. | The QA Workflow Division format page opens and shows `Workflow Round Robin`. |
 | E2E-SAFE-004 | Record workflow fixture score | Desktop only; skipped on mobile | Marks Workflow Alpha vs Workflow Bravo completed at 12-7. | Resets workflow fixtures before and after the test. | Match row shows completed status and the entered score. |
 | E2E-SAFE-005 | Update workflow fixture time | Desktop only; skipped on mobile | Moves Workflow Charlie vs Workflow Delta to 11:30. | Resets workflow fixtures before and after the test. | Schedule shows the workflow fixture at 11:30. |
-| E2E-SAFE-006 | Edit tournament general details | Desktop only; skipped on mobile | Temporarily changes the QA tournament title, sport, and default scoring. | Resets the QA tournament general fields before and after the test. | General details save and the admin header/form reflect the edited values. |
+| E2E-SAFE-006 | Edit tournament general details | Desktop only; skipped on mobile | Temporarily changes the QA tournament title, sport, default scoring, and public parking notes. | Resets the QA tournament general fields (including seeded parking notes) before and after the test. | General details save, the edited values show in the form, and the parking note persists across a page reload. |
 | E2E-SAFE-007 | Create and edit scoring template | Desktop only; skipped on mobile | Creates `QA E2E Scoring Template`, then renames it and changes win points. | Deletes the temporary scoring templates before and after the test. | The scoring table shows the created and edited points template. |
 | E2E-SAFE-008 | Open guided change-format picker | Desktop only; skipped on mobile | Opens the format picker for `QA Format - Two Pools` without applying a new format. | No data mutation. | The picker shows major format choices such as round robin, group-stage finals, knockout, and league season. |
 | E2E-SAFE-009 | View fixture-generation controls | Desktop only; skipped on mobile | Opens Advanced setup for `QA Format - Two Pools`. | No data mutation. | Fixture generation controls for Pool Play and unscheduled-only regeneration are visible. |

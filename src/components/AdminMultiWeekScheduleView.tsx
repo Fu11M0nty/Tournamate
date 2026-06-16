@@ -79,6 +79,14 @@ const WEEKDAYS = [
   { value: 0, label: 'Sun' },
 ]
 
+const SCHEDULABLE_PHASE_TYPES: Phase['phase_type'][] = [
+  'round_robin',
+  'group_stage',
+  'league',
+  'knockout',
+  'friendly',
+]
+
 function defaultDraft(tournament: Tournament): DraftSettings {
   return {
     start_date: tournament.start_date ?? '',
@@ -503,7 +511,7 @@ export default function AdminMultiWeekScheduleView({
         .from('phases')
         .select('*')
         .in('age_group_id', ageGroupIds)
-        .in('phase_type', ['league', 'knockout'])
+        .in('phase_type', SCHEDULABLE_PHASE_TYPES)
         .order('display_order', { ascending: true }),
       supabase
         .from('teams')
@@ -947,10 +955,10 @@ export default function AdminMultiWeekScheduleView({
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
             Multi-week schedule
-            <HelpPrompt guideSlug="multi-week-league" label="the multi-week league planner" tip="Venue hours, the calendar, auto-plan, and fine-tuning" />
+            <HelpPrompt guideSlug="multi-week-league" label="the multi-week fixture planner" tip="Venue hours, the calendar, auto-plan, and fine-tuning" />
           </h1>
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            Plan league and bracket fixtures across dates, weekdays, and venue strategies.
+            Plan fixtures across dates, weekdays, and venue strategies.
           </p>
         </div>
         <button
@@ -974,7 +982,7 @@ export default function AdminMultiWeekScheduleView({
                 className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
               >
                 {phases.length === 0 ? (
-                  <option value="">No league or bracket phases</option>
+                  <option value="">No fixture phases</option>
                 ) : (
                   phases.map((phase) => {
                     const division = ageGroupById.get(phase.age_group_id)

@@ -2,8 +2,15 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import PublicSponsorBadge from './PublicSponsorBadge'
 import TeamLogo from './TeamLogo'
+import { buildTournamentBranding } from '@/lib/branding'
 import { labelForLegacyDay } from '@/lib/competitionDates'
+import {
+  buildContactRows,
+  buildPublicInfoSections,
+  publicNotice,
+} from '@/lib/publicEventInfo'
 import { formatKickoffDate, formatKickoffTime } from '@/lib/time'
 import type { AgeGroup, Day, Match, Team, Tournament } from '@/lib/types'
 import type { ReactNode } from 'react'
@@ -156,7 +163,11 @@ export default function TournamentLandingHub({
   const playedMatches = filteredTournamentMatches.filter((match) => match.status === 'completed').length
   const upcomingMatches = filteredTournamentMatches.filter((match) => match.status === 'scheduled' && match.is_planned).length
   const location = formatLocation(tournament)
+  const branding = buildTournamentBranding(tournament)
   const presentDays: Day[] = ['saturday', 'sunday'].filter((day) => groups.some((group) => group.day === day)) as Day[]
+  const notice = publicNotice(tournament)
+  const infoSections = buildPublicInfoSections(tournament)
+  const contactRows = buildContactRows(tournament)
 
   const followedTeams = followedTeamIds
     .map((id) => teamsById.get(id))
@@ -217,37 +228,76 @@ export default function TournamentLandingHub({
     <main className="mx-auto w-full max-w-6xl pb-16">
       <section className="relative overflow-hidden bg-tm-navy text-white">
         <div className="relative px-4 pt-8 pb-10 sm:px-8 sm:pt-12 sm:pb-14">
-          <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-tm-orange ring-1 ring-tm-orange/40 backdrop-blur">
-            <span className="h-1.5 w-1.5 rounded-full bg-tm-orange" />
-            {tournament.status === 'live'
-              ? 'Live tournament'
-              : tournament.status === 'upcoming'
-                ? 'Upcoming'
-                : 'Tournament'}
-          </span>
-          <h1 className="mt-4 text-3xl font-black leading-tight tracking-tight sm:text-5xl">
-            {tournament.name}
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm text-white/70 sm:text-base">
-            {formatDateRange(tournament.start_date, tournament.end_date)}
-            {location ? ` - ${location}` : ''}
-          </p>
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <span
+                className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] ring-1 backdrop-blur"
+                style={{
+                  color: branding.primaryColor,
+                  borderColor: `${branding.primaryColor}66`,
+                }}
+              >
+                <span
+                  className="h-1.5 w-1.5 rounded-full"
+                  style={{ backgroundColor: branding.primaryColor }}
+                />
+                {tournament.status === 'live'
+                  ? 'Live tournament'
+                  : tournament.status === 'upcoming'
+                    ? 'Upcoming'
+                    : 'Tournament'}
+              </span>
+              <h1 className="mt-4 text-3xl font-black leading-tight tracking-tight sm:text-5xl">
+                {tournament.name}
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm text-white/70 sm:text-base">
+                {formatDateRange(tournament.start_date, tournament.end_date)}
+                {location ? ` - ${location}` : ''}
+              </p>
+            </div>
+            {branding.logoUrl && (
+              <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-md bg-white p-3 shadow-sm ring-1 ring-white/30 sm:h-24 sm:w-24">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={branding.logoUrl}
+                  alt={`${tournament.name} logo`}
+                  className="h-full w-full object-contain"
+                />
+              </div>
+            )}
+          </div>
+
           <div className="mt-5 flex flex-wrap gap-2 text-xs font-semibold">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-white/90 ring-1 ring-white/15">
-              <span className="text-tm-orange">{groups.length}</span> divisions
+              <span style={{ color: branding.primaryColor }}>{groups.length}</span> divisions
             </span>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-white/90 ring-1 ring-white/15">
-              <span className="text-tm-orange">{teams.length}</span> teams
+              <span style={{ color: branding.primaryColor }}>{teams.length}</span> teams
             </span>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-white/90 ring-1 ring-white/15">
-              <span className="text-tm-orange">{playedMatches}</span> / {totalMatches} played
+              <span style={{ color: branding.primaryColor }}>{playedMatches}</span> / {totalMatches} played
             </span>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-white/90 ring-1 ring-white/15">
-              <span className="text-tm-orange">{upcomingMatches}</span> upcoming
+              <span style={{ color: branding.primaryColor }}>{upcomingMatches}</span> upcoming
             </span>
           </div>
+          <PublicSponsorBadge branding={branding} className="mt-4" />
         </div>
       </section>
+
+      {notice && (
+        <div
+          data-testid="public-notice-banner"
+          className="flex items-start gap-3 border-b border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900/50 dark:bg-amber-950/30 sm:px-8"
+        >
+          <span className="mt-0.5 inline-flex shrink-0 items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-amber-700 dark:text-amber-300">
+            Notice
+          </span>
+          <p className="whitespace-pre-line text-sm font-medium leading-6 text-amber-900 dark:text-amber-200">
+            {notice}
+          </p>
+        </div>
+      )}
 
       <nav aria-label="Tournament sections" className="sticky top-0 z-20 border-b border-zinc-200 bg-white/95 px-4 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95 sm:px-6">
         <ul className="-mx-1 flex overflow-x-auto py-2">
@@ -257,6 +307,11 @@ export default function TournamentLandingHub({
                 href={`/${tournament.slug}?tab=${tab.id}`}
                 scroll={false}
                 aria-current={activeTab === tab.id ? 'page' : undefined}
+                style={
+                  activeTab === tab.id
+                    ? { backgroundColor: branding.primaryColor }
+                    : undefined
+                }
                 className={
                   activeTab === tab.id
                     ? 'inline-flex h-10 items-center rounded-full bg-tm-orange px-4 text-xs font-black uppercase tracking-wider text-white shadow-sm'
@@ -272,18 +327,32 @@ export default function TournamentLandingHub({
 
       {activeTab === 'info' && (
         <section className="grid gap-4 px-4 pt-8 sm:px-6 lg:grid-cols-[1.4fr_0.8fr]">
-          <article className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-            <h2 className="text-lg font-extrabold text-tm-navy dark:text-zinc-50">Tournament info</h2>
-            {tournament.description ? (
-              <p className="mt-3 whitespace-pre-line text-sm leading-6 text-zinc-600 dark:text-zinc-300">
-                {tournament.description}
-              </p>
-            ) : (
-              <p className="mt-3 text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-                Key organiser information will appear here when it has been added for this tournament.
-              </p>
-            )}
-          </article>
+          <div className="space-y-4">
+            <article className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+              <h2 className="text-lg font-extrabold text-tm-navy dark:text-zinc-50">Tournament info</h2>
+              {tournament.description ? (
+                <p className="mt-3 whitespace-pre-line text-sm leading-6 text-zinc-600 dark:text-zinc-300">
+                  {tournament.description}
+                </p>
+              ) : (
+                <p className="mt-3 text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+                  Key organiser information will appear here when it has been added for this tournament.
+                </p>
+              )}
+            </article>
+
+            {infoSections.map((section) => (
+              <article
+                key={section.key}
+                className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950"
+              >
+                <h3 className="text-sm font-extrabold text-tm-navy dark:text-zinc-50">{section.label}</h3>
+                <p className="mt-2 whitespace-pre-line text-sm leading-6 text-zinc-600 dark:text-zinc-300">
+                  {section.text}
+                </p>
+              </article>
+            ))}
+          </div>
 
           <aside className="space-y-4">
             <article className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
@@ -308,12 +377,39 @@ export default function TournamentLandingHub({
               </dl>
             </article>
 
-            <article className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-900/50">
-              <h3 className="text-sm font-extrabold text-tm-navy dark:text-zinc-50">Venue information</h3>
-              <p className="mt-2 text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-                Directions, maps, organiser contacts, parking notes and venue documents can be shown here once those fields are added in the organiser console.
-              </p>
-            </article>
+            {contactRows.length > 0 && (
+              <article
+                data-testid="public-contact-card"
+                className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950"
+              >
+                <h3 className="text-sm font-extrabold text-tm-navy dark:text-zinc-50">Contact</h3>
+                <dl className="mt-3 space-y-3 text-sm">
+                  {contactRows.map((row) => (
+                    <div key={row.key}>
+                      <dt className="text-xs font-bold uppercase tracking-wider text-zinc-400">{row.label}</dt>
+                      <dd className="mt-0.5 font-semibold text-zinc-700 dark:text-zinc-200">
+                        {row.href ? (
+                          <a href={row.href} className="break-words text-tm-orange underline-offset-2 hover:underline">
+                            {row.value}
+                          </a>
+                        ) : (
+                          row.value
+                        )}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </article>
+            )}
+
+            {infoSections.length === 0 && contactRows.length === 0 && (
+              <article className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-900/50">
+                <h3 className="text-sm font-extrabold text-tm-navy dark:text-zinc-50">Venue information</h3>
+                <p className="mt-2 text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+                  Directions, parking notes, organiser contacts and arrival instructions will appear here once the organiser adds them.
+                </p>
+              </article>
+            )}
           </aside>
         </section>
       )}

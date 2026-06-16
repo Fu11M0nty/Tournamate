@@ -754,12 +754,17 @@ begin
     raise exception 'Tournament slug % already exists', new_slug;
   end if;
 
-  insert into tournaments (slug, name, start_date, end_date, status, display_order, created_by)
-    values (
+  insert into tournaments (
+    slug, name, start_date, end_date, status, display_order, created_by,
+    logo_url, brand_primary_color, sponsor_name, sponsor_logo_url, sponsor_url
+  )
+    select
       new_slug, new_name, new_start_date, new_end_date, new_status,
       (select coalesce(max(display_order), 0) + 1 from tournaments),
-      auth.uid()
-    )
+      auth.uid(),
+      t.logo_url, t.brand_primary_color, t.sponsor_name, t.sponsor_logo_url, t.sponsor_url
+    from tournaments t
+    where t.id = source_id
     returning id into new_tournament_id;
 
   if new_start_date is not null and source_start is not null then

@@ -31,7 +31,7 @@ export const HELP_GUIDES: HelpGuide[] = [
               '**Name** — appears at the top of every public page and in browser tabs.',
               '**Slug (web address)** — your tournament\'s unique URL, e.g. `tournamate.uk/spring-league-2026`. Keep it short and lowercase; avoid spaces and special characters.',
               '**Status** — **Upcoming** shows the tournament as coming soon, **Live** features it prominently with live results, **Complete** keeps it available as an archive of final standings.',
-              '**Logo** — upload a PNG with a transparent background so it looks sharp on light and dark themes.',
+              '**Branding** — optionally add a tournament logo, primary accent colour, sponsor name, sponsor logo, and sponsor website. These appear on public pages and scorecards, while empty fields stay hidden.',
             ],
           },
           {
@@ -297,7 +297,11 @@ export const HELP_GUIDES: HelpGuide[] = [
         blocks: [
           {
             type: 'paragraph',
-            text: 'Formats can chain stages — for example a group stage followed by semi-finals and a final. **Progression rules** carry teams forward automatically: "1st in Pool A" or "Winner of Semi-final 1" resolve to real teams as soon as the qualifying results are entered. You never have to move winners by hand.',
+            text: 'Formats can chain stages — for example a group stage followed by semi-finals and a final. **Progression rules** describe how teams carry forward: "1st in Pool A" or "Winner of Semi-final 1". When a stage\'s results are in, use **Resolve qualifiers** on the next stage\'s card (in the Format page\'s advanced view) — the dialog previews every entrant, and **Apply resolved slots** writes them into the bracket and generates the stage\'s fixtures. You never have to move winners by hand-editing fixtures.',
+          },
+          {
+            type: 'paragraph',
+            text: 'After a format is applied, the **Format timeline** includes a diagram beneath the stage cards so organisers can see the qualification path and open a stage for editing from the visual route.',
           },
           {
             type: 'tip',
@@ -417,7 +421,7 @@ export const HELP_GUIDES: HelpGuide[] = [
             type: 'list',
             items: [
               'Fixtures start **unscheduled** — they exist, but have no date, time, or court until you plan them on the Schedule panel.',
-              'Knockout fixtures whose entrants aren\'t known yet show labels like **"Winner of Semi-final 1"** until results decide them.',
+              'Knockout fixtures whose entrants aren\'t known yet show labels like **"Winner of Semi-final 1"** until you resolve the stage\'s qualifiers after results are in.',
               'In the **Match Entry** panel, the **Matrix** view shows a team-by-team grid of fixtures — a quick way to verify everyone plays the right opponents.',
             ],
           },
@@ -455,6 +459,7 @@ export const HELP_GUIDES: HelpGuide[] = [
               '**Auto-plan** packs unplanned fixtures into available court time for you, respecting match length and breaks — usually the fastest way to build a first draft.',
               'Non-match blocks like **lunch breaks or presentations** can be added as schedule events so no fixtures land in them.',
               'The schedule can be exported to Excel for printing or sharing.',
+              'When the plan is final, **lock the schedule** (the 🔓/🔒 toggle) — locking prevents accidental changes and unlocks scorecard printing.',
             ],
           },
           {
@@ -484,8 +489,8 @@ export const HELP_GUIDES: HelpGuide[] = [
   },
   {
     slug: 'multi-week-league',
-    title: 'Running a multi-week league',
-    summary: 'The calendar-based league planner: venue hours and courts, drag-and-drop scheduling, auto-plan, and fine-tuning.',
+    title: 'Running a multi-week schedule',
+    summary: 'The calendar-based fixture planner: venue hours and courts, drag-and-drop scheduling, auto-plan, and fine-tuning.',
     category: 'scheduling',
     panel: 'schedule',
     youtubeUrl: null,
@@ -498,8 +503,8 @@ export const HELP_GUIDES: HelpGuide[] = [
             type: 'steps',
             items: [
               'In the **General** panel, set **Scheduling mode** to multi-week league and set the **Competition window** — the first and last dates of your season.',
-              'Create your divisions and apply a league format (e.g. round robin or home-and-away) so fixtures exist.',
-              'Open the **Schedule** panel — in this mode it is a calendar-based league planner.',
+              'Create your divisions and apply a format so fixtures exist, such as round robin, group stages, leagues, knockouts, or a staged championship/plate format.',
+              'Open the **Schedule** panel — in this mode it is a calendar-based fixture planner.',
             ],
           },
         ],
@@ -561,11 +566,11 @@ export const HELP_GUIDES: HelpGuide[] = [
         ],
       },
       {
-        heading: 'Leagues with finals',
+        heading: 'Staged formats with finals',
         blocks: [
           {
             type: 'paragraph',
-            text: 'If your league ends with knockout finals, plan each phase separately using the phase selector. Knockout fixtures can only be placed on dates **after the league fixtures finish**, and the league\'s planned matches stay visible (greyed out) while you plan the knockout so you can see the whole season.',
+            text: 'If your format has several stages, plan each phase separately using the phase selector. Earlier planned matches stay visible (greyed out) while you plan a later stage so you can see the whole season.',
           },
           {
             type: 'tip',
@@ -617,7 +622,7 @@ export const HELP_GUIDES: HelpGuide[] = [
         blocks: [
           {
             type: 'paragraph',
-            text: 'As pool and league results complete, progression rules resolve bracket placeholders automatically — "Winner of Semi-final 1" becomes the real team the moment the semi-final is saved. If you correct a score later, downstream placeholders update with it.',
+            text: 'When a stage\'s results are all in, carry the qualifiers forward: open the division\'s **Format** page and use **Resolve qualifiers** on the next stage, then **Apply resolved slots**. Check the stage\'s scores are correct **before** applying — once qualifiers are written in, correcting an earlier score does not re-run them.',
           },
           {
             type: 'tip',
@@ -675,13 +680,14 @@ export const HELP_GUIDES: HelpGuide[] = [
         blocks: [
           {
             type: 'paragraph',
-            text: 'Tournamate generates printable scorecards for a day\'s fixtures — one card per match, including the teams, scheduled time and court, space for the score, and the match\'s **QR code** for digital capture.',
+            text: 'Tournamate generates printable scorecards for a day\'s fixtures — one card per match, including the teams, scheduled time and court, space for the score, and the match\'s **QR code** for digital capture. If tournament branding is set in General, the card adds a compact logo header and optional sponsor strip without reducing the score-entry area.',
           },
           {
             type: 'steps',
             items: [
               'Plan your schedule first, so each card carries the right time and court.',
-              'Open the scorecards page for the day and use the print bar to print the set (or save as PDF from your browser\'s print dialog).',
+              '**Lock the schedule** — the 🔓/🔒 toggle on the Schedule panel. Scorecards are only available once the schedule is locked, so cards can\'t drift from the plan.',
+              'Use **Print scorecards** on the Schedule panel to open the day\'s cards, then print the set (or save as PDF from your browser\'s print dialog).',
               'Hand cards to scorers or pin them court-side; completed cards become your paper audit trail.',
             ],
           },
@@ -711,12 +717,36 @@ export const HELP_GUIDES: HelpGuide[] = [
               'Tournaments set to **Live** are featured on the public Explore page; **Upcoming** tournaments show as coming soon.',
               'Standings, results, and bracket progress update in real time as you save scores — nothing to publish manually.',
               'Public pages are designed mobile-first, so links shared in team group chats work well on phones.',
+              'Tournament branding from General adds a logo, accent colour, and optional sponsor badge to the public hub and division pages.',
             ],
           },
           {
             type: 'tip',
             title: 'Before going live',
             text: 'Open your public page on a phone and check each division\'s standings and fixtures look right. Share the link or a QR code of it with clubs once you\'re happy.',
+          },
+        ],
+      },
+      {
+        heading: 'Public event information',
+        blocks: [
+          {
+            type: 'paragraph',
+            text: 'The **Public event information** section on the General panel turns your public Info tab into the event-day source of truth. Everything you enter there is visible to spectators — empty fields are simply hidden.',
+          },
+          {
+            type: 'list',
+            items: [
+              '**Getting there & arrival, Parking, Venue notes, Facilities** — each appears as its own card on the public Info tab when filled in.',
+              '**Organiser contact name, email, and phone** — shown in a Contact card; email and phone are tappable on mobile (opens the mail app or dialler).',
+              '**Emergency / first-aid contact** — listed in the same Contact card so anyone at the venue can find help fast.',
+              '**Public notice** — shown as a highlighted banner across **every** public tab (Info, Teams, Standings, Schedule). Use it for last-minute announcements like court changes or delays.',
+            ],
+          },
+          {
+            type: 'tip',
+            title: 'Match-day announcements',
+            text: 'The public notice updates as soon as you save General details — spectators just need to refresh the page. Clear it after the event so the banner disappears.',
           },
         ],
       },
@@ -739,10 +769,10 @@ export const HELP_GUIDES: HelpGuide[] = [
             items: [
               '**Standings look wrong or empty** — standings only count **completed** matches. Check the scores were saved, and that the right scoring system is attached to the phase.',
               '**A team is missing from the table** — the team must be assigned to a pool or league table in the division\'s format. Check the Format page\'s pool assignments.',
-              '**A bracket still shows "Winner of…"** — the feeding match isn\'t completed yet, or its result was saved in a different phase. Complete the source match and the slot resolves automatically.',
+              '**A bracket still shows "Winner of…"** — the feeding match isn\'t completed yet, or the next stage\'s qualifiers haven\'t been applied. Complete the source matches, then use **Resolve qualifiers** on the division\'s Format page to write the qualifying teams into the bracket.',
               '**A fixture has no time or court** — it is generated but unscheduled. Place it on the Schedule panel; the Match Entry status strip counts these for you.',
               '**I was signed out** — admin sessions sign out automatically after **10 minutes of inactivity** for security. Sign back in and continue; nothing is lost.',
-              '**I made a mistake in lots of scores** — restore from a snapshot if you took one at the right moment, or correct the individual results; standings always recalculate.',
+              '**I made a mistake in lots of scores** — correct the individual results (standings always recalculate), or ask your Tournamate contact to restore a snapshot if you took one at the right moment.',
             ],
           },
           {
@@ -866,14 +896,14 @@ export const HELP_GUIDES: HelpGuide[] = [
         blocks: [
           {
             type: 'paragraph',
-            text: 'A **snapshot** captures a division\'s matches at a moment in time, labelled with a reason you choose (e.g. "End of pools"). The **Snapshots** panel lists what you\'ve taken and lets you restore one if something goes wrong.',
+            text: 'A **snapshot** captures a division\'s matches at a moment in time, labelled with a reason you choose (e.g. "End of pools"). The **Snapshots** panel lists what you\'ve taken so you can inspect exactly what each one captured. If something goes wrong, your Tournamate support contact can restore a snapshot for you.',
           },
           {
             type: 'steps',
             items: [
               'In Match Entry, use the **Snapshot** button below the match list to capture the current division, and give it a clear reason.',
-              'Review your snapshots in the **Snapshots** panel.',
-              'To roll back, restore the snapshot you want — the division\'s matches return to exactly that state.',
+              'Review your snapshots in the **Snapshots** panel — select one to inspect the matches and scores it captured.',
+              'To roll back, contact Tournamate support with the snapshot you want — restoring returns the division\'s matches to exactly that state.',
             ],
           },
           {

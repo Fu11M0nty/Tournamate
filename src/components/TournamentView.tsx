@@ -15,6 +15,8 @@ import FixtureCard from './FixtureCard'
 import TeamFilter from './TeamFilter'
 import PrintButton from './PrintButton'
 import PublicBracketView from './PublicBracketView'
+import PublicSponsorBadge from './PublicSponsorBadge'
+import { buildTournamentBranding } from '@/lib/branding'
 import type { Division, Day, ElementSlot, Match, Pool, ScoringSystem, StandingRow, Team, Tournament } from '@/lib/types'
 import { matchStageRoundLabel } from '@/lib/matchLabel'
 
@@ -160,6 +162,7 @@ export default function TournamentView({
 
   const dayLabel = labelForLegacyDay(tournament, day)
   const baseDivisionPath = `/${tournament.slug}/${day}/${currentGroup.slug}`
+  const branding = buildTournamentBranding(tournament)
 
   function hrefForTeam(teamId: string | null) {
     const params = new URLSearchParams()
@@ -216,14 +219,26 @@ export default function TournamentView({
         <div aria-hidden="true" className="pointer-events-none absolute -left-20 bottom-[-80px] h-64 w-64 rounded-full bg-tm-sky/15 blur-3xl" />
 
         <div className="relative px-4 pt-8 pb-10 sm:px-8 sm:pt-12 sm:pb-12">
-          <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-tm-orange ring-1 ring-tm-orange/40 backdrop-blur">
-            <span className="h-1.5 w-1.5 rounded-full bg-tm-orange" />
+          <span
+            className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] ring-1 backdrop-blur"
+            style={{
+              color: branding.primaryColor,
+              borderColor: `${branding.primaryColor}66`,
+            }}
+          >
+            <span
+              className="h-1.5 w-1.5 rounded-full"
+              style={{ backgroundColor: branding.primaryColor }}
+            />
             {tournament.sport ?? 'Netball'} Tournament
           </span>
 
           <h1 className="mt-4 text-3xl font-black leading-tight tracking-tight sm:text-5xl">
             {currentGroup.name}
-            <span className="ml-2 inline-block rounded-md bg-tm-orange px-2 py-0.5 align-middle text-sm font-bold uppercase tracking-wider text-white sm:text-base">
+            <span
+              className="ml-2 inline-block rounded-md px-2 py-0.5 align-middle text-sm font-bold uppercase tracking-wider text-white sm:text-base"
+              style={{ backgroundColor: branding.primaryColor }}
+            >
               {dayLabel}
             </span>
           </h1>
@@ -231,14 +246,24 @@ export default function TournamentView({
           <p className="mt-2 max-w-xl text-sm text-white/70 sm:text-base">
             {tournament.name}. Live standings, results and fixtures — refresh any time for the latest from courtside.
           </p>
+          {branding.logoUrl && (
+            <div className="mt-4 flex h-16 w-16 items-center justify-center rounded-md bg-white p-2 shadow-sm ring-1 ring-white/30 sm:absolute sm:right-8 sm:top-8 sm:mt-0 sm:h-20 sm:w-20">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={branding.logoUrl}
+                alt={`${tournament.name} logo`}
+                className="h-full w-full object-contain"
+              />
+            </div>
+          )}
 
           {/* Stats chips */}
           <div className="mt-4 flex flex-wrap items-center gap-2 text-xs font-semibold">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-white/90 ring-1 ring-white/15">
-              <span className="text-tm-orange">{teams.length}</span> teams
+              <span style={{ color: branding.primaryColor }}>{teams.length}</span> teams
             </span>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-white/90 ring-1 ring-white/15">
-              <span className="text-tm-orange">{completedCount}</span> / {phaseMatches.length} played
+              <span style={{ color: branding.primaryColor }}>{completedCount}</span> / {phaseMatches.length} played
             </span>
             {currentPhase && phases.length > 1 && (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-white/90 ring-1 ring-white/15">
@@ -246,7 +271,13 @@ export default function TournamentView({
               </span>
             )}
             {allComplete && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-tm-orange/20 px-3 py-1.5 text-tm-orange ring-1 ring-tm-orange/30">
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 ring-1"
+                style={{
+                  color: branding.primaryColor,
+                  borderColor: `${branding.primaryColor}55`,
+                }}
+              >
                 🏆 Group complete
               </span>
             )}
@@ -260,6 +291,7 @@ export default function TournamentView({
               </span>
             )}
           </div>
+          <PublicSponsorBadge branding={branding} className="mt-4" />
 
           {/* Progress bar */}
           {phaseMatches.length > 0 && (
@@ -270,8 +302,11 @@ export default function TournamentView({
               </div>
               <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/15">
                 <div
-                  className="h-full rounded-full bg-tm-orange transition-all"
-                  style={{ width: `${progressPct}%` }}
+                  className="h-full rounded-full transition-all"
+                  style={{
+                    width: `${progressPct}%`,
+                    backgroundColor: branding.primaryColor,
+                  }}
                 />
               </div>
             </div>
@@ -315,6 +350,7 @@ export default function TournamentView({
                     href={`/${tournament.slug}?tab=${tab.id}`}
                     scroll={false}
                     aria-current={active ? 'page' : undefined}
+                    style={active ? { backgroundColor: branding.primaryColor } : undefined}
                     className={
                       active
                         ? 'inline-flex h-10 items-center rounded-full bg-tm-orange px-4 text-xs font-black uppercase tracking-wider text-white shadow-sm'

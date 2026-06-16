@@ -13,6 +13,7 @@ import type {
   Team,
 } from '@/lib/types'
 import { buildReadyChecks, ordinal } from '@/lib/structureValidation'
+import { SavedFormatDiagram } from './FormatDiagram'
 
 type PoolWithTeams = Pool & { pool_teams?: PoolTeam[] }
 type PhaseElementWithSlots = PhaseElement & { slots?: ElementSlot[] }
@@ -158,11 +159,13 @@ export function FormatOverviewCard({
 export function FormatTimeline({
   phases,
   matches,
+  teams,
   progressionRules,
   onEditStage,
 }: {
   phases: PhaseWithPools[]
   matches: Match[]
+  teams: Team[]
   progressionRules: ProgressionRule[]
   onEditStage: (phase: PhaseWithPools) => void
 }) {
@@ -319,6 +322,16 @@ export function FormatTimeline({
             )
           })}
         </div>
+      </div>
+
+      <div className="mt-4">
+        <SavedFormatDiagram
+          phases={sortedPhases}
+          matches={matches}
+          teams={teams}
+          progressionRules={progressionRules}
+          onEditStage={onEditStage}
+        />
       </div>
     </section>
   )

@@ -223,6 +223,35 @@ describe('QA seeded database', () => {
     expect(insertResult.error).toBeTruthy()
   })
 
+  it('seeds public event info fields readable by anonymous spectators', async () => {
+    const info = await expectData<Record<string, string | null>>(
+      await anon
+        .from('tournaments')
+        .select(
+          'organiser_contact_name, organiser_contact_email, organiser_contact_phone, arrival_instructions, parking_notes, venue_notes, facilities_notes, emergency_contact, public_notice'
+        )
+        .eq('id', tournament.id)
+        .single(),
+      'Anon reads public event info'
+    )
+
+    expect(info).toMatchObject({
+      organiser_contact_name: 'QA Organiser',
+      organiser_contact_email: 'qa-organiser@example.com',
+      organiser_contact_phone: '07700 900123',
+    })
+    for (const field of [
+      'arrival_instructions',
+      'parking_notes',
+      'venue_notes',
+      'facilities_notes',
+      'emergency_contact',
+      'public_notice',
+    ]) {
+      expect(info[field], `seeded ${field}`).toBeTruthy()
+    }
+  })
+
   it('can sign in as the QA admin user created by the seed', async () => {
     const email = process.env.QA_ADMIN_EMAIL || process.env.E2E_ADMIN_EMAIL || 'qa-admin@tournamate.test'
     const password = process.env.QA_ADMIN_PASSWORD || process.env.E2E_ADMIN_PASSWORD || 'Tournamate-QA-Admin-123!'

@@ -5,6 +5,7 @@ import {
   deleteWorkflowTeamsByName,
   divisionRow,
   openAdminPanel,
+  openQaTournament,
   resetQaTournamentGeneral,
   resetWorkflowFixtures,
   signInAndOpenQaTournament,
@@ -17,6 +18,7 @@ const TEMP_DIVISION_SLUG = 'qa-e2e-temp-division'
 const TEMP_DIVISION_EDITED_SLUG = 'qa-e2e-temp-division-edited'
 const TEMP_WORKFLOW_TEAM = 'Workflow E2E Team'
 const TEMP_TOURNAMENT_TITLE = 'QA Smoke Tournament E2E Edited'
+const TEMP_PARKING_NOTE = 'QA E2E parking note: use overflow car park B.'
 const TEMP_SCORING_NAME = 'QA E2E Scoring Template'
 const TEMP_SCORING_EDITED_NAME = 'QA E2E Scoring Template Edited'
 
@@ -40,11 +42,18 @@ test.describe('QA admin safe workflow mutations', () => {
       await page.getByLabel('Title / name').fill(TEMP_TOURNAMENT_TITLE)
       await page.getByLabel('Sport').selectOption('Football')
       await page.getByLabel('Default scoring').selectOption({ label: 'QA Standard Netball' })
+      await page.getByLabel('Parking notes').fill(TEMP_PARKING_NOTE)
       await page.getByRole('button', { name: 'Save general' }).first().click()
 
       await expect(page.getByText(TEMP_TOURNAMENT_TITLE).first()).toBeVisible({ timeout: 10_000 })
       await expect(page.getByLabel('Sport')).toHaveValue('Football')
       await expect(page.getByLabel('Default scoring').locator('option:checked')).toHaveText('QA Standard Netball')
+
+      // Reload to prove the public event info field persisted to the database.
+      await page.reload()
+      await openQaTournament(page)
+      await openAdminPanel(page, 'General')
+      await expect(page.getByLabel('Parking notes')).toHaveValue(TEMP_PARKING_NOTE, { timeout: 10_000 })
     } finally {
       await resetQaTournamentGeneral()
     }
