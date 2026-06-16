@@ -307,6 +307,25 @@ The QA seed should continue to maintain one disposable division per major struct
 | CI pipeline | Add scheduled or PR-triggered runs when the project is ready for hosted automation. |
 | Environment gates | Separate local, staging, and pre-production QA targets with clear environment variable profiles. |
 
+## Pilot Runbook Dry-Run (opt-in)
+
+`tests/e2e/qa-pilot-dryrun.spec.ts` is an **opt-in** harness that walks the dry-run validation checklist in `docs/pilot/pilot-runbook.md` (§9) against the seeded QA tournament. It is **not** part of `qa:e2e`/`qa:release`: every test is skipped unless `PILOT_DRYRUN=1` is set, because it mutates seeded format divisions (it builds a disposable `qa-dryrun-ko` knockout division) and is desktop-only.
+
+Run it against a running app with seeded data:
+
+```powershell
+npm run qa:reset
+$env:PILOT_DRYRUN = '1'; $env:PLAYWRIGHT_BASE_URL = 'http://localhost:3000'
+npx playwright test qa-pilot-dryrun --project=chromium --workers=1
+npm run qa:cleanup
+```
+
+Expected result: **10 passed** (chromium). It covers score entry + correction, no-show forfeit, late-arrival deduction, QR capture end-to-end, scorecard printing gated on a locked schedule, schedule fixture move, snapshot capture/inspect, knockout progression readiness, public standings/schedule at 375px and 1280px, and the anonymous `/admin` gate.
+
+### Known gap — progression apply tail
+
+Check 8 asserts the documented progression workflow is **reachable and ready** (the **Resolve qualifiers** affordance plus the "Qualifier destinations ready" preview), but does **not** drive the final dialog interaction — opening `StartNextPhaseDialog` and pressing **Apply resolved slots**, then asserting the public bracket loses its "Winner of…" placeholders. The Start dialog does not open reliably under Playwright in the advanced structure editor (its open state is reset by a background refetch). That tail is verified by component review of `StartNextPhaseDialog.tsx` plus the `progression_rules`/`element_slots` data, and should be automated when the editor's data-load is made interaction-stable.
+
 ## Adding New Tests
 
 When adding new automated QA tests:
