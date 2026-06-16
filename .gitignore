@@ -56,3 +56,8 @@ next-env.d.ts
 
 # Microsoft Office temporary owner/lock files
 ~$*
+
+# Generated pilot doc exports (regenerate with `npm run docs:pilot` — sources are the .md)
+/docs/pilot/*.html
+/docs/pilot/*.docx
+/docs/pilot/*.pdf
