@@ -2,7 +2,7 @@
 
 > **Status:** Pilot definition · **Last updated:** 2026-06-09
 > **Audience:** Internal product/delivery team (planning + scope control).
-> **Companion doc:** [`pilot-onepager.md`](./pilot-onepager.md) — the plain-language version to share with a prospective organiser.
+> **Companion docs:** [`pilot-onepager.md`](./pilot-onepager.md) — the plain-language version to share with a prospective organiser · [`pilot-runbook.md`](./pilot-runbook.md) — the step-by-step operations runbook for running the pilot · [`matchday-checklist.md`](./matchday-checklist.md) — the printable match-day checklist.
 
 This document defines the **first Tournamate pilot**: a single UK netball club or league competition run end-to-end on Tournamate, with hands-on (concierge) setup support. It exists to set expectations, prevent scope creep, and give a volunteer organiser confidence before match day.
 

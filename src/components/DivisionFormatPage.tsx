@@ -261,6 +261,12 @@ export default function DivisionFormatPage({
     }
   }
 
+  function editStageFromTimeline(phase: PhaseWithPools) {
+    advancedEditorRef.current?.editPhase(
+      phase as Parameters<AdvancedStructureEditorHandle['editPhase']>[0]
+    )
+  }
+
   async function deletePhases() {
     const phaseIds = phases.map((p) => p.id)
     if (phaseIds.length === 0) return null
@@ -395,13 +401,9 @@ export default function DivisionFormatPage({
           <FormatTimeline
             phases={phases}
             matches={matches}
+            teams={teams}
             progressionRules={progressionRules}
-            onEditStage={(phase) => {
-              openAdvanced()
-              advancedEditorRef.current?.editPhase(
-                phase as Parameters<AdvancedStructureEditorHandle['editPhase']>[0]
-              )
-            }}
+            onEditStage={editStageFromTimeline}
           />
           <QualificationSummary
             phases={phases}

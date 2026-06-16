@@ -858,10 +858,6 @@ function buildDirectGradingFinalsPhases(
     { toPool: 'match-1', startSlot: 1 }, { toPool: 'match-1', startSlot: 2 },
     { toPool: 'match-2', startSlot: 1 }, { toPool: 'match-2', startSlot: 2 },
   ]
-  const directTargets: SlotTarget[] = [
-    { toPool: 'match-1', startSlot: 1 }, { toPool: 'match-1', startSlot: 2 },
-    { toPool: 'match-2', startSlot: 1 }, { toPool: 'match-2', startSlot: 2 },
-  ]
 
   if (style === 'final_only') {
     const slots: SlotTarget[] = [{ toPool: 'match-1', startSlot: 1 }, { toPool: 'match-1', startSlot: 2 }]
@@ -1813,6 +1809,18 @@ export async function applyFormatBuilder(
   }
 
   for (const [phaseIndex, phaseTemplate] of builder.phases.entries()) {
+    const phaseMetadata: Record<string, unknown> =
+      phaseTemplate.phaseType === 'league' && leagueRepeatCount
+        ? { league_repeat_count: leagueRepeatCount }
+        : {}
+
+    if (phaseTemplate.displayColumn !== undefined) {
+      phaseMetadata.diagram_display_column = phaseTemplate.displayColumn
+    }
+    if (phaseTemplate.yAlignNode) {
+      phaseMetadata.diagram_y_align_node = phaseTemplate.yAlignNode
+    }
+
     const { data: phaseRows, error: phaseError } = await supabase
       .from('phases')
       .upsert(
@@ -1829,10 +1837,7 @@ export async function applyFormatBuilder(
           break_q1_q2_minutes: ageGroup.break_q1_q2_minutes,
           break_half_time_minutes: ageGroup.break_half_time_minutes,
           break_q3_q4_minutes: ageGroup.break_q3_q4_minutes,
-          metadata:
-            phaseTemplate.phaseType === 'league' && leagueRepeatCount
-              ? { league_repeat_count: leagueRepeatCount }
-              : {},
+          metadata: phaseMetadata,
         },
         { onConflict: 'age_group_id,slug' }
       )

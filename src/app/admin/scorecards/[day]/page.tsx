@@ -1,9 +1,11 @@
 import { Fragment } from 'react'
 import { headers } from 'next/headers'
+import Link from 'next/link'
 import { createServerSupabaseClient } from '@/lib/supabase'
+import { buildTournamentBranding } from '@/lib/branding'
 import ScorecardCard from '@/components/ScorecardCard'
 import ScorecardPrintBar from '@/components/ScorecardPrintBar'
-import type { AgeGroup, Match, Team } from '@/lib/types'
+import type { AgeGroup, Match, Team, Tournament } from '@/lib/types'
 
 interface Props {
   params: Promise<{ day: string }>
@@ -27,9 +29,9 @@ export default async function ScorecardsPage({ params, searchParams }: Props) {
       <main className="flex min-h-screen items-center justify-center p-8 font-sans">
         <div className="text-center">
           <p className="mb-4 text-zinc-600">Invalid day or missing tournament ID.</p>
-          <a href="/admin" className="font-semibold text-mk-red hover:underline">
+          <Link href="/admin" className="font-semibold text-mk-red hover:underline">
             ← Back to admin
-          </a>
+          </Link>
         </div>
       </main>
     )
@@ -45,7 +47,9 @@ export default async function ScorecardsPage({ params, searchParams }: Props) {
 
   const { data: tournament } = await supabase
     .from('tournaments')
-    .select('id, name, schedule_locked')
+    .select(
+      'id, name, schedule_locked, logo_url, brand_primary_color, sponsor_name, sponsor_logo_url, sponsor_url'
+    )
     .eq('id', tournamentId)
     .single()
 
@@ -54,13 +58,16 @@ export default async function ScorecardsPage({ params, searchParams }: Props) {
       <main className="flex min-h-screen items-center justify-center p-8 font-sans">
         <div className="text-center">
           <p className="mb-4 text-zinc-600">Tournament not found.</p>
-          <a href="/admin" className="font-semibold text-mk-red hover:underline">
+          <Link href="/admin" className="font-semibold text-mk-red hover:underline">
             ← Back to admin
-          </a>
+          </Link>
         </div>
       </main>
     )
   }
+
+  const tournamentRecord = tournament as Tournament
+  const branding = buildTournamentBranding(tournamentRecord)
 
   if (!tournament.schedule_locked) {
     return (
@@ -74,9 +81,9 @@ export default async function ScorecardsPage({ params, searchParams }: Props) {
             Scorecards are not available until the schedule is locked. Lock the
             schedule from the Schedule view.
           </p>
-          <a href="/admin" className="font-semibold text-mk-red hover:underline">
+          <Link href="/admin" className="font-semibold text-mk-red hover:underline">
             ← Back to admin
-          </a>
+          </Link>
         </div>
       </main>
     )
@@ -94,9 +101,9 @@ export default async function ScorecardsPage({ params, searchParams }: Props) {
       <main className="flex min-h-screen items-center justify-center p-8 font-sans">
         <div className="text-center">
           <p className="mb-4 text-zinc-600">No divisions found for {day}.</p>
-          <a href="/admin" className="font-semibold text-mk-red hover:underline">
+          <Link href="/admin" className="font-semibold text-mk-red hover:underline">
             ← Back to admin
-          </a>
+          </Link>
         </div>
       </main>
     )
@@ -197,6 +204,19 @@ export default async function ScorecardsPage({ params, searchParams }: Props) {
                 marginBottom: '8mm',
               }}
             >
+              {branding.logoUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={branding.logoUrl}
+                  alt=""
+                  style={{
+                    maxHeight: '18mm',
+                    maxWidth: '32mm',
+                    objectFit: 'contain',
+                    marginBottom: '4mm',
+                  }}
+                />
+              )}
               <h1
                 style={{
                   fontSize: '22pt',
@@ -404,6 +424,8 @@ export default async function ScorecardsPage({ params, searchParams }: Props) {
                         ageGroup={ag}
                         copy="home"
                         captureUrl={captureUrl}
+                        tournamentName={tournament.name}
+                        branding={branding}
                       />
                       <ScorecardCard
                         match={match}
@@ -412,6 +434,8 @@ export default async function ScorecardsPage({ params, searchParams }: Props) {
                         ageGroup={ag}
                         copy="away"
                         captureUrl={captureUrl}
+                        tournamentName={tournament.name}
+                        branding={branding}
                       />
                     </Fragment>
                   )

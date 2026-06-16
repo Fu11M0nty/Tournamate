@@ -3,6 +3,16 @@
 import { useMemo } from 'react'
 import { resolveFormatBuilder } from '@/lib/formatBuilders'
 import type { FormatBuilderOptions, FormatBuilderTemplate } from '@/lib/formatBuilders'
+import type {
+  ElementSlot,
+  Match,
+  Phase,
+  PhaseElement,
+  Pool,
+  PoolTeam,
+  ProgressionRule,
+  Team,
+} from '@/lib/types'
 
 // ─── Layout constants ────────────────────────────────────────────────────────
 const NW = 160   // node width
@@ -16,7 +26,6 @@ const TP = 10    // top padding above headers
 const SP = 16    // left/right side padding
 const BP = 24    // bottom padding
 const BRACKET_VGAP = 44 // vertical gap between Championship and Plate zones
-const KO_TITLE_H = 24  // height of the knockout match node's title bar
 
 function ordinal(n: number): string {
   if (n === 1) return '1st'
@@ -26,7 +35,7 @@ function ordinal(n: number): string {
 }
 
 // ─── Internal types (mirror the lib shapes we need) ─────────────────────────
-interface PoolT { slug: string; name: string; isDefault?: boolean }
+interface PoolT { slug: string; name: string; isDefault?: boolean; slotLabels?: string[] }
 interface PhaseT { slug: string; name: string; phaseType: string; displayColumn?: number; yAlignNode?: string; pools: PoolT[] }
 interface ProgT {
   fromPhase: string; fromPool: string; ranks: number[]; sourceType?: string
@@ -119,9 +128,10 @@ function buildDiagram(phases: PhaseT[], progressions: ProgT[]) {
       const displayName = pool.isDefault ? phase.name : pool.name
       let slots: [string, string] | null = null
       if (ko) {
+        const savedSlotLabels = pool.slotLabels ?? []
         slots = [
-          slotLabels.get(`${phase.slug}:${pool.slug}:1`) ?? '…',
-          slotLabels.get(`${phase.slug}:${pool.slug}:2`) ?? '…',
+          savedSlotLabels[0] ?? slotLabels.get(`${phase.slug}:${pool.slug}:1`) ?? '...',
+          savedSlotLabels[1] ?? slotLabels.get(`${phase.slug}:${pool.slug}:2`) ?? '...',
         ]
       }
       const node: DiagramNode = {
@@ -684,5 +694,572 @@ export default function FormatDiagram({ builder, options, teamCount = 0 }: Forma
         ))}
       </div>
     </div>
+  )
+}
+
+type SavedPool = Pool & { pool_teams?: PoolTeam[] }
+type SavedPhaseElement = PhaseElement & { slots?: ElementSlot[] }
+export type SavedFormatDiagramPhase = Phase & {
+  pools?: SavedPool[]
+  phase_elements?: SavedPhaseElement[]
+}
+
+interface NodeRef {
+  phaseSlug: string
+  poolSlug: string
+}
+
+interface SavedDiagramModel {
+  phases: PhaseT[]
+  progressions: ProgT[]
+  phaseBySlug: Map<string, SavedFormatDiagramPhase>
+}
+
+function phaseMetadata(phase: SavedFormatDiagramPhase): Record<string, unknown> {
+  return phase.metadata && typeof phase.metadata === 'object' ? phase.metadata : {}
+}
+
+function savedDisplayColumn(phase: SavedFormatDiagramPhase): number | undefined {
+  const metadata = phaseMetadata(phase)
+  const value =
+    metadata.diagram_display_column ??
+    metadata.format_diagram_display_column ??
+    metadata.displayColumn ??
+    metadata.display_column
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+function savedYAlignNode(
+  phase: SavedFormatDiagramPhase,
+  phaseBySlug: Map<string, SavedFormatDiagramPhase>
+): string | undefined {
+  const metadata = phaseMetadata(phase)
+  const value =
+    metadata.diagram_y_align_node ??
+    metadata.format_diagram_y_align_node ??
+    metadata.yAlignNode
+
+  if (typeof value === 'string' && value.trim()) return value
+
+  if (phase.slug === 'preliminary-final' && phaseBySlug.has('major-minor-finals')) {
+    return 'major-minor-finals:minor-semi-final'
+  }
+  if (phase.slug === 'grand-final' && phaseBySlug.has('major-minor-finals')) {
+    return 'major-minor-finals:major-semi-final'
+  }
+  if (phase.slug.endsWith('-prelim-final')) {
+    const prefix = phase.slug.slice(0, -'-prelim-final'.length)
+    const majorMinorSlug = `${prefix}-major-minor`
+    if (phaseBySlug.has(majorMinorSlug)) return `${majorMinorSlug}:minor-semi-final`
+  }
+  if (phase.slug.endsWith('-grand-final')) {
+    const prefix = phase.slug.slice(0, -'-grand-final'.length)
+    const majorMinorSlug = `${prefix}-major-minor`
+    if (phaseBySlug.has(majorMinorSlug)) return `${majorMinorSlug}:major-semi-final`
+  }
+
+  return undefined
+}
+
+function formatSavedSlotLabel(slot: ElementSlot, teamById: Map<string, Team>): string {
+  if (slot.label?.trim()) return slot.label
+  if (slot.team_id) return teamById.get(slot.team_id)?.name ?? 'Team'
+  if (slot.slot_type === 'bye') return 'Bye'
+  if (slot.slot_type === 'placeholder') return 'TBC'
+  if (slot.slot_type === 'manual') return 'Manual entry'
+  if (slot.source_outcome === 'winner') return 'Winner'
+  if (slot.source_outcome === 'loser') return 'Loser'
+  if (slot.source_outcome === 'best_rank') {
+    return slot.source_rank ? `Best ${ordinal(slot.source_rank)}` : 'Best qualifier'
+  }
+  if (slot.source_rank) return `${ordinal(slot.source_rank)} qualifier`
+  return 'Qualifier'
+}
+
+function buildSavedDiagramModel(
+  phases: SavedFormatDiagramPhase[],
+  progressionRules: ProgressionRule[],
+  matches: Match[],
+  teams: Team[]
+): SavedDiagramModel {
+  const sortedPhases = [...phases].sort(
+    (a, b) => a.display_order - b.display_order || a.name.localeCompare(b.name)
+  )
+  const phaseIds = new Set(sortedPhases.map((phase) => phase.id))
+  const phaseById = new Map(sortedPhases.map((phase) => [phase.id, phase]))
+  const phaseBySlug = new Map(sortedPhases.map((phase) => [phase.slug, phase]))
+  const phaseIndexById = new Map(sortedPhases.map((phase, index) => [phase.id, index]))
+  const poolById = new Map<string, SavedPool>()
+  const elementById = new Map<string, SavedPhaseElement>()
+  const elementByPoolId = new Map<string, SavedPhaseElement>()
+  const slotById = new Map<string, ElementSlot>()
+  const matchById = new Map(matches.map((match) => [match.id, match]))
+  const teamById = new Map(teams.map((team) => [team.id, team]))
+
+  for (const phase of sortedPhases) {
+    for (const pool of phase.pools ?? []) {
+      poolById.set(pool.id, pool)
+    }
+    for (const element of phase.phase_elements ?? []) {
+      elementById.set(element.id, element)
+      if (element.pool_id) elementByPoolId.set(element.pool_id, element)
+      for (const slot of element.slots ?? []) {
+        slotById.set(slot.id, slot)
+      }
+    }
+  }
+
+  const nodeByPoolId = new Map<string, NodeRef>()
+  const nodeByElementId = new Map<string, NodeRef>()
+  const nodeByPhaseId = new Map<string, NodeRef>()
+
+  for (const phase of sortedPhases) {
+    const pools = [...(phase.pools ?? [])].sort(
+      (a, b) => a.display_order - b.display_order || a.name.localeCompare(b.name)
+    )
+    for (const pool of pools) {
+      const ref = { phaseSlug: phase.slug, poolSlug: pool.slug }
+      nodeByPoolId.set(pool.id, ref)
+      if (!nodeByPhaseId.has(phase.id)) nodeByPhaseId.set(phase.id, ref)
+    }
+
+    const elements = [...(phase.phase_elements ?? [])].sort(
+      (a, b) => a.display_order - b.display_order || a.name.localeCompare(b.name)
+    )
+    for (const element of elements) {
+      const poolRef = element.pool_id ? nodeByPoolId.get(element.pool_id) : undefined
+      const ref = poolRef ?? { phaseSlug: phase.slug, poolSlug: element.slug }
+      nodeByElementId.set(element.id, ref)
+      if (!nodeByPhaseId.has(phase.id)) nodeByPhaseId.set(phase.id, ref)
+    }
+  }
+
+  const targetPhaseIdForRule = (rule: ProgressionRule) =>
+    rule.to_phase_id ?? elementById.get(rule.to_element_id)?.phase_id ?? null
+
+  const sourcePhaseIdForRule = (rule: ProgressionRule) => {
+    if (rule.from_phase_id) return rule.from_phase_id
+    if (rule.from_element_id) return elementById.get(rule.from_element_id)?.phase_id ?? null
+    if (rule.from_pool_id) return poolById.get(rule.from_pool_id)?.phase_id ?? null
+    if (rule.from_match_id) {
+      const match = matchById.get(rule.from_match_id)
+      return (
+        match?.phase_id ??
+        (match?.phase_element_id ? elementById.get(match.phase_element_id)?.phase_id : null) ??
+        (match?.pool_id ? poolById.get(match.pool_id)?.phase_id : null) ??
+        null
+      )
+    }
+    return null
+  }
+
+  const sourceNodeForRule = (rule: ProgressionRule): NodeRef | null => {
+    if (rule.from_match_id) {
+      const match = matchById.get(rule.from_match_id)
+      const matchElementNode = match?.phase_element_id ? nodeByElementId.get(match.phase_element_id) : undefined
+      const matchPoolNode = match?.pool_id ? nodeByPoolId.get(match.pool_id) : undefined
+      const matchPhaseNode = match?.phase_id ? nodeByPhaseId.get(match.phase_id) : undefined
+      if (matchElementNode || matchPoolNode || matchPhaseNode) {
+        return matchElementNode ?? matchPoolNode ?? matchPhaseNode ?? null
+      }
+    }
+    if (rule.from_element_id) return nodeByElementId.get(rule.from_element_id) ?? null
+    if (rule.from_pool_id) return nodeByPoolId.get(rule.from_pool_id) ?? null
+    if (rule.from_phase_id) return nodeByPhaseId.get(rule.from_phase_id) ?? null
+    return null
+  }
+
+  const relevantRules = progressionRules.filter((rule) => {
+    const targetPhaseId = targetPhaseIdForRule(rule)
+    return targetPhaseId ? phaseIds.has(targetPhaseId) : false
+  })
+
+  const incomingSourceIdsByPhase = new Map<string, Set<string>>()
+  for (const rule of relevantRules) {
+    const targetPhaseId = targetPhaseIdForRule(rule)
+    const sourcePhaseId = sourcePhaseIdForRule(rule)
+    if (!targetPhaseId || !sourcePhaseId || targetPhaseId === sourcePhaseId) continue
+    const sourceIds = incomingSourceIdsByPhase.get(targetPhaseId) ?? new Set<string>()
+    sourceIds.add(sourcePhaseId)
+    incomingSourceIdsByPhase.set(targetPhaseId, sourceIds)
+  }
+
+  const displayColumnByPhaseId = new Map<string, number>()
+  for (const [index, phase] of sortedPhases.entries()) {
+    const metadataColumn = savedDisplayColumn(phase)
+    if (metadataColumn !== undefined) {
+      displayColumnByPhaseId.set(phase.id, metadataColumn)
+      continue
+    }
+
+    const sourceIds = incomingSourceIdsByPhase.get(phase.id)
+    if (sourceIds?.size) {
+      const sourceColumns = [...sourceIds].map((sourceId) =>
+        displayColumnByPhaseId.get(sourceId) ?? phaseIndexById.get(sourceId) ?? 0
+      )
+      displayColumnByPhaseId.set(phase.id, Math.max(...sourceColumns) + 1)
+      continue
+    }
+
+    const previousPhase = sortedPhases[index - 1]
+    displayColumnByPhaseId.set(
+      phase.id,
+      previousPhase ? (displayColumnByPhaseId.get(previousPhase.id) ?? index - 1) + 1 : 0
+    )
+  }
+
+  const diagramPhases: PhaseT[] = sortedPhases.map((phase) => {
+    const pools = [...(phase.pools ?? [])].sort(
+      (a, b) => a.display_order - b.display_order || a.name.localeCompare(b.name)
+    )
+    const elements = [...(phase.phase_elements ?? [])].sort(
+      (a, b) => a.display_order - b.display_order || a.name.localeCompare(b.name)
+    )
+    const diagramPools: PoolT[] = pools.map((pool) => {
+      const element = elementByPoolId.get(pool.id)
+      const slotLabels = (element?.slots ?? [])
+        .slice()
+        .sort((a, b) => a.display_order - b.display_order)
+        .map((slot) => formatSavedSlotLabel(slot, teamById))
+      return {
+        slug: pool.slug,
+        name: pool.name,
+        isDefault: pool.is_default,
+        slotLabels,
+      }
+    })
+
+    for (const element of elements) {
+      if (element.pool_id) continue
+      diagramPools.push({
+        slug: element.slug,
+        name: element.name,
+        slotLabels: (element.slots ?? [])
+          .slice()
+          .sort((a, b) => a.display_order - b.display_order)
+          .map((slot) => formatSavedSlotLabel(slot, teamById)),
+      })
+    }
+
+    return {
+      slug: phase.slug,
+      name: phase.name,
+      phaseType: phase.phase_type,
+      displayColumn: displayColumnByPhaseId.get(phase.id),
+      yAlignNode: savedYAlignNode(phase, phaseBySlug),
+      pools: diagramPools,
+    }
+  })
+
+  const sourceTypesByNode = new Map<string, Set<ProgressionRule['source_type']>>()
+  for (const rule of relevantRules) {
+    const sourceNode = sourceNodeForRule(rule)
+    if (!sourceNode) continue
+    const key = `${sourceNode.phaseSlug}:${sourceNode.poolSlug}`
+    const types = sourceTypesByNode.get(key) ?? new Set<ProgressionRule['source_type']>()
+    types.add(rule.source_type)
+    sourceTypesByNode.set(key, types)
+  }
+
+  const diagramProgressions: ProgT[] = []
+  for (const rule of relevantRules) {
+    if (rule.source_type === 'manual') continue
+    const targetNode = nodeByElementId.get(rule.to_element_id)
+    if (!targetNode) continue
+
+    const sourcePhaseId = sourcePhaseIdForRule(rule)
+    const sourcePhase = sourcePhaseId ? phaseById.get(sourcePhaseId) : undefined
+    const isBestRank = rule.source_type === 'best_rank'
+    const sourceNode = isBestRank ? null : sourceNodeForRule(rule)
+    if (!isBestRank && !sourceNode) continue
+    if (isBestRank && !sourcePhase) continue
+
+    const startSlot =
+      rule.to_slot_order ??
+      (rule.to_slot_id ? slotById.get(rule.to_slot_id)?.display_order : undefined) ??
+      rule.display_order
+
+    const sourceKey = sourceNode ? `${sourceNode.phaseSlug}:${sourceNode.poolSlug}` : null
+    const sourceTypes = sourceKey ? sourceTypesByNode.get(sourceKey) : undefined
+    const showEdgeLabel =
+      (rule.source_type === 'match_winner' || rule.source_type === 'match_loser') &&
+      Boolean(sourceTypes?.has('match_loser'))
+
+    diagramProgressions.push({
+      fromPhase: sourceNode?.phaseSlug ?? sourcePhase!.slug,
+      fromPool: sourceNode?.poolSlug ?? '__best_rank__',
+      ranks: [rule.source_rank ?? 1],
+      sourceType: rule.source_type,
+      toPhase: targetNode.phaseSlug,
+      toPool: targetNode.poolSlug,
+      startSlot,
+      isBestRank,
+      showEdgeLabel,
+    })
+  }
+
+  return { phases: diagramPhases, progressions: diagramProgressions, phaseBySlug }
+}
+
+function SavedFormatDiagramCanvas({
+  phases,
+  progressions,
+  onNodeClick,
+}: {
+  phases: PhaseT[]
+  progressions: ProgT[]
+  onNodeClick?: (node: DiagramNode) => void
+}) {
+  const { nodes, edges, buses, totalW, totalH, separatorY, separatorStartX } = useMemo(
+    () => buildDiagram(phases, progressions),
+    [phases, progressions]
+  )
+
+  if (nodes.length === 0) return null
+
+  function renderNodeContent(node: DiagramNode) {
+    if (node.isKnockout && node.slots) {
+      return (
+        <>
+          <div className="border-b border-zinc-100 bg-zinc-50 px-2.5 py-1 dark:border-zinc-800 dark:bg-zinc-900">
+            <p className="truncate text-[10px] font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+              {node.displayName}
+            </p>
+          </div>
+          {node.slots.map((slot, i) => (
+            <div
+              key={i}
+              className="flex items-center gap-1.5 border-b border-zinc-50 px-2.5 py-1.5 last:border-b-0 dark:border-zinc-900"
+            >
+              <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-[8px] font-black text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                {i + 1}
+              </span>
+              <span className="truncate text-[11px] leading-tight text-zinc-600 dark:text-zinc-400">
+                {slot}
+              </span>
+            </div>
+          ))}
+        </>
+      )
+    }
+
+    return (
+      <div className="flex h-full flex-col justify-center px-3">
+        <p className="truncate text-sm font-semibold text-zinc-800 dark:text-zinc-100">
+          {node.displayName}
+        </p>
+        <p className="mt-0.5 text-[10px] text-zinc-400 dark:text-zinc-500">
+          {node.phaseName !== node.displayName ? node.phaseName : 'Group stage'}
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900/50">
+      <div className="px-4 pt-4">
+        <p className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+          Format diagram
+        </p>
+      </div>
+      <div className="relative min-w-full p-4" style={{ width: totalW + SP * 2, height: totalH }}>
+        {separatorY !== null
+          ? [
+              { label: 'Championship', y: TP },
+              { label: 'Plate', y: separatorY + 6 },
+            ].map(({ label, y }) => (
+              <div
+                key={label}
+                className="absolute text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500"
+                style={{ left: separatorStartX + SP, right: SP, top: y, textAlign: 'left' }}
+              >
+                {label}
+              </div>
+            ))
+          : nodes
+              .reduce<{ colIndex: number; label: string }[]>((acc, node) => {
+                if (acc.some(h => h.colIndex === node.colIndex)) return acc
+                const colPhaseNames = [...new Set(
+                  nodes.filter(n => n.colIndex === node.colIndex).map(n => n.phaseName)
+                )]
+                acc.push({ colIndex: node.colIndex, label: colPhaseNames.join(' / ') })
+                return acc
+              }, [])
+              .map(({ colIndex, label }) => (
+                <div
+                  key={colIndex}
+                  className="absolute text-center text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500"
+                  style={{ left: SP + colIndex * (NW + CG), width: NW, top: TP }}
+                >
+                  {label}
+                </div>
+              ))
+        }
+
+        <svg
+          className="pointer-events-none absolute inset-0"
+          width={totalW + SP * 2}
+          height={totalH}
+          aria-hidden="true"
+        >
+          <defs>
+            <marker
+              id="arrow"
+              viewBox="0 0 6 6"
+              refX="5"
+              refY="3"
+              markerWidth="5"
+              markerHeight="5"
+              orient="auto"
+            >
+              <path d="M 0 1 L 5 3 L 0 5 z" className="fill-zinc-300 dark:fill-zinc-600" />
+            </marker>
+          </defs>
+          {separatorY !== null && (
+            <line
+              x1={separatorStartX}
+              y1={separatorY}
+              x2={totalW + SP}
+              y2={separatorY}
+              strokeWidth="1"
+              strokeDasharray="5 4"
+              className="stroke-zinc-300 dark:stroke-zinc-600"
+            />
+          )}
+          {buses.map(bus => (
+            <g key={bus.key}>
+              {bus.stubs.map((s, i) => (
+                <line
+                  key={`stub-${i}`}
+                  x1={s.fromX + SP}
+                  y1={s.y}
+                  x2={bus.x + SP}
+                  y2={s.y}
+                  strokeWidth="1.5"
+                  className="stroke-zinc-300 dark:stroke-zinc-600"
+                />
+              ))}
+              <line
+                x1={bus.x + SP}
+                y1={bus.y1}
+                x2={bus.x + SP}
+                y2={bus.y2}
+                strokeWidth="1.5"
+                className="stroke-zinc-300 dark:stroke-zinc-600"
+              />
+              {bus.fanouts.map((f, i) => (
+                <line
+                  key={`fan-${i}`}
+                  x1={bus.x + SP}
+                  y1={f.y}
+                  x2={f.toX + SP - 2}
+                  y2={f.y}
+                  strokeWidth="1.5"
+                  markerEnd="url(#arrow)"
+                  className="stroke-zinc-300 dark:stroke-zinc-600"
+                />
+              ))}
+            </g>
+          ))}
+          {edges.map(edge => {
+            const isSkip = edge.toCol > edge.fromCol + 1
+            const isStraightSkip = isSkip && Math.abs(edge.fromY - edge.toY) <= 1
+            const fx = edge.fromX + SP
+            const tx = edge.toX + SP - 2
+            const d = isStraightSkip
+              ? `M ${fx} ${edge.fromY} H ${tx}`
+              : isSkip
+                ? `M ${fx} ${edge.fromY} V ${edge.skipSafeY} H ${tx} V ${edge.toY}`
+                : `M ${fx} ${edge.fromY} H ${(edge.fromX + edge.toX) / 2 + SP} V ${edge.toY} H ${tx}`
+            const labelX = (fx + tx) / 2
+            const labelY = (edge.fromY + edge.toY) / 2 - 7
+            return (
+              <g key={edge.key}>
+                <path
+                  d={d}
+                  fill="none"
+                  strokeWidth="1.5"
+                  markerEnd="url(#arrow)"
+                  className="stroke-zinc-300 dark:stroke-zinc-600"
+                />
+                {edge.label && (
+                  <text
+                    x={labelX}
+                    y={labelY}
+                    textAnchor="middle"
+                    fontSize="8"
+                    className="fill-zinc-400 dark:fill-zinc-500"
+                  >
+                    {edge.label}
+                  </text>
+                )}
+              </g>
+            )
+          })}
+        </svg>
+
+        {nodes.map(node => {
+          const className = [
+            'absolute overflow-hidden rounded-lg border border-zinc-200 bg-white text-left shadow-sm dark:border-zinc-700 dark:bg-zinc-950',
+            onNodeClick
+              ? 'cursor-pointer transition hover:border-mk-red hover:shadow-md focus:outline-none focus:ring-2 focus:ring-mk-red focus:ring-offset-2 dark:focus:ring-offset-zinc-950'
+              : '',
+          ].join(' ')
+          const style = { left: node.x + SP, top: node.y, width: NW, height: node.h }
+
+          return onNodeClick ? (
+            <button
+              key={node.id}
+              type="button"
+              onClick={() => onNodeClick(node)}
+              className={className}
+              style={style}
+              title={`Edit ${node.phaseName}`}
+              aria-label={`Edit ${node.phaseName}`}
+            >
+              {renderNodeContent(node)}
+            </button>
+          ) : (
+            <div key={node.id} className={className} style={style}>
+              {renderNodeContent(node)}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+export function SavedFormatDiagram({
+  phases,
+  progressionRules,
+  matches,
+  teams,
+  onEditStage,
+}: {
+  phases: SavedFormatDiagramPhase[]
+  progressionRules: ProgressionRule[]
+  matches?: Match[]
+  teams?: Team[]
+  onEditStage?: (phase: SavedFormatDiagramPhase) => void
+}) {
+  const model = useMemo(
+    () => buildSavedDiagramModel(phases, progressionRules, matches ?? [], teams ?? []),
+    [matches, phases, progressionRules, teams]
+  )
+
+  return (
+    <SavedFormatDiagramCanvas
+      phases={model.phases}
+      progressions={model.progressions}
+      onNodeClick={
+        onEditStage
+          ? (node) => {
+              const phase = model.phaseBySlug.get(node.phaseSlug)
+              if (phase) onEditStage(phase)
+            }
+          : undefined
+      }
+    />
   )
 }
